@@ -112,6 +112,14 @@ public:
      */
     void processFrame(const MLX90640RawFrame *rawFrame, MLX90640Frame *frame, float emissivity);
 
+    /**
+     * Processes a standard frame of 1536 bytes into a frame of 1440 bytes discarding the MSB of every pixel
+     * in order to reduce the number of pages used inside the flash memory.
+     * \param frame is a pointer to the original frame object
+     * \param memoryFrame is a pointer to an object allocated by the caller in which the new frame will be stored
+    */
+    void reduceFrame(const MLX90640Frame *frame, MLX90640MemoryFrame *memoryFrame);
+
     const MLX90640EEPROM& getEEPROM();
     
 private:

@@ -111,6 +111,8 @@ public:
     ApplicationOptions options;
     Lifecycle lifecycle;
     bool paused = false;
+    bool writeOut = false;
+    bool saving = false;
 
 private:
     ApplicationUI(const ApplicationUI&)=delete;
@@ -140,7 +142,13 @@ private:
 
     void drawMenuEntry(mxgui::DrawingContext& dc, int id);
 
+    void drawStaticTopBar(mxgui::DrawingContext& dc, bool save);
+
     void updateMenu(mxgui::DrawingContext& dc);
+
+    void enterCamera(mxgui::DrawingContext& dc);
+
+    void updateCamera(mxgui::DrawingContext& dc);
 
     void enterShutdown(mxgui::DrawingContext& dc);
 
@@ -169,6 +177,7 @@ private:
         BootMsg,
         Main,
         Menu,
+        Camera,
         Shutdown
     };
     State state = State::BootMsg;
@@ -178,6 +187,7 @@ private:
         Emissivity,
         FrameRate,
         Brightness,
+        CameraMenu,
         SaveChanges,
         NumEntries
     };
@@ -195,6 +205,7 @@ void ApplicationUI<IOHandler>::update()
         case BootMsg: updateBootMessage(dc); break;
         case Main: updateMain(dc); break;
         case Menu: updateMenu(dc); break;
+        case Camera: updateCamera(dc); break;
         case Shutdown:
         default: break;
     }
@@ -210,7 +221,7 @@ void ApplicationUI<IOHandler>::updateFrame(MLX90640Frame *processedFrame)
         std::lock_guard<std::mutex> lock(lastFrameMutex);
         lastFrame = std::shared_ptr<MLX90640Frame>(processedFrame);
     }
-    if (state == Main || state == Menu)
+    if (state == Main || state == Menu || state == Camera)
     {
         mxgui::DrawingContext dc(display);
         drawFrame(dc);
@@ -273,12 +284,13 @@ void ApplicationUI<IOHandler>::drawStaticPartOfMainScreen(mxgui::DrawingContext&
 {
     dc.clear(mxgui::black);
     //For mxgui::point coordinates see ui-mockup-main-screen.png
-    dc.drawImage(mxgui::Point(0,0),emissivityicon);
-    char line[16];
+    /*char line[16];
     snprintf(line,sizeof(line),"%.2f  %2dfps ",options.emissivity,options.frameRate);
+    dc.drawImage(mxgui::Point(0,0),emissivityicon);
     dc.setFont(smallFont);
     dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
-    dc.write(mxgui::Point(11,0),line);
+    dc.write(mxgui::Point(11,0),line);*/
+    drawStaticTopBar(dc, false);
     const mxgui::Color darkGrey=to565(128,128,128), lightGrey=to565(192,192,192);
     dc.line(mxgui::Point(0,12),mxgui::Point(0,107),darkGrey);
     dc.line(mxgui::Point(1,12),mxgui::Point(127,12),darkGrey);
@@ -287,6 +299,35 @@ void ApplicationUI<IOHandler>::drawStaticPartOfMainScreen(mxgui::DrawingContext&
     dc.drawImage(mxgui::Point(18,115),smallcelsiusicon);
     dc.drawImage(mxgui::Point(117,115),smallcelsiusicon);
     dc.drawImage(mxgui::Point(72,109),largecelsiusicon);
+}
+
+template<class IOHandler>
+void ApplicationUI<IOHandler>::drawStaticTopBar(mxgui::DrawingContext& dc, bool save)
+{
+    const mxgui::Point p0(0,0);
+    const mxgui::Point p1(127,12);
+    dc.clear(p0, p1, mxgui::black);
+    char line[16];
+    if(save)
+    {
+        char yes[4];
+        char no [3];
+        sniprintf(line, sizeof(line), "save?");
+        sniprintf(yes, sizeof(yes), "yes ");
+        sniprintf(no, sizeof(no), "no ");
+
+        dc.setFont(smallFont);
+        dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+        dc.write(mxgui::Point(1,0), yes);
+        dc.write(mxgui::Point(52,0),line);
+        dc.write(mxgui::Point(116,0), no);
+    } else {
+        snprintf(line,sizeof(line),"%.2f  %2dfps ",options.emissivity,options.frameRate);
+        dc.drawImage(mxgui::Point(0,0),emissivityicon);
+        dc.setFont(smallFont);
+        dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+        dc.write(mxgui::Point(11,0),line);
+    }
 }
 
 template<class IOHandler>
@@ -331,6 +372,53 @@ void ApplicationUI<IOHandler>::updateMain(mxgui::DrawingContext& dc)
     }
     else if(upBtn.getDownEvent()) enterMenu(dc);
     drawUSBConnectionIndicator(dc);
+}
+
+template<class IOHandler>
+void ApplicationUI<IOHandler>::enterCamera(mxgui::DrawingContext& dc)
+{
+    state=Camera;
+    drawStaticPartOfMainScreen(dc);
+    drawFrame(dc);
+    onBtn.ignoreUntilNextPress();
+    upBtn.ignoreUntilNextPress();
+}
+
+template<class IOHandler>
+void ApplicationUI<IOHandler>::updateCamera(mxgui::DrawingContext& dc)
+{
+    
+    if(upBtn.getLongPressEvent()){
+        enterMenu(dc);
+        writeOut=false;
+        puts("BACK TO MENU");
+    } else if(upBtn.getUpEvent()){
+            if(!saving){
+                drawStaticTopBar(dc, true); //showing inside top bar the save confirmation
+                saving=true;
+                paused=true;
+                ioHandler.setPause(paused); //no new image will be processed
+                puts("Saving confirmation");
+            }else { //save confirmed
+                drawStaticTopBar(dc, false); //remove save confirmation from top
+                writeOut=true;
+                saving=false;
+                ioHandler.setWriteOut(); //wake up write buffer
+                paused=false;
+                ioHandler.setPause(paused); //frame processing restarted
+                puts("Trying to save");
+            }
+    } 
+    if(onBtn.getUpEvent()){
+        if(saving){ //save refused, frame processing restart
+            drawStaticTopBar(dc, false);
+            writeOut=false;
+            paused=false;
+            ioHandler.setPause(paused);
+            saving=false;
+            puts("Not writing");
+        }
+    }
 }
 
 template<class IOHandler>
@@ -408,6 +496,9 @@ void ApplicationUI<IOHandler>::drawMenuEntry(mxgui::DrawingContext& dc, int id)
         case SaveChanges:
             _drawMenuEntry(dc, SaveChanges, "Save changes");
             break;
+        case CameraMenu:
+            _drawMenuEntry(dc, CameraMenu, "Camera");
+            break;
     }
 }
 
@@ -437,6 +528,9 @@ void ApplicationUI<IOHandler>::updateMenu(mxgui::DrawingContext& dc)
                 break;
             case SaveChanges:
                 ioHandler.saveOptions(options);
+                break;
+            case CameraMenu:
+                enterCamera(dc);
                 break;
             case Back:
                 enterMain(dc);
@@ -476,13 +570,14 @@ void ApplicationUI<IOHandler>::drawFrame(mxgui::DrawingContext& dc)
         auto t1 = miosix::getTime();
         #endif
         bool smallCached=(state == Menu); //Cache now if the main thread changes it
+        bool camera=(state == Camera);
         if(smallCached==false) renderer->render(frame.get());
         else renderer->renderSmall(frame.get());
         #if 0 && defined(_MIOSIX)
         auto t2 = miosix::getTime();
         #endif
         dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
-        if(smallCached==false)
+        if((smallCached==false) & (camera==false))
         {
             //For mxgui::point coordinates see ui-mockup-main-screen.png
             renderer->draw(dc,mxgui::Point(1,13));
@@ -496,13 +591,22 @@ void ApplicationUI<IOHandler>::drawFrame(mxgui::DrawingContext& dc)
             renderer->legend(buffer,dc.getWidth());
             for(int y=124;y<=127;y++)
                 dc.scanLineBuffer(mxgui::Point(0,y),dc.getWidth());
-        } else {
+        } else if(camera == false){
             //For mxgui::point coordinates see ui-mockup-menu-screen.png
             renderer->drawSmall(dc,mxgui::Point(1,1));
             drawTemperature(dc,mxgui::Point(96,12),mxgui::Point(112,20),smallFont,
                             renderer->maxTemperature());
             drawTemperature(dc,mxgui::Point(96,25),mxgui::Point(112,33),smallFont,
                             renderer->minTemperature());
+        } else {
+            renderer->draw(dc,mxgui::Point(1,13));       
+            char remaining[16];
+            unsigned int occupied = ioHandler.memoryState->getOccupiedMemory()/6;
+            unsigned int total = ioHandler.memoryState->getTotalMemory() / 6;
+            sniprintf(remaining, 16, "%u/%u",occupied, total);
+            dc.setFont(smallFont);
+            dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+            dc.write(mxgui::Point(100,0), remaining);
         }
         #if 0 && defined(_MIOSIX)
         auto t3 = miosix::getTime();

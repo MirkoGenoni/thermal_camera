@@ -87,6 +87,11 @@ void MLX90640::processFrame(const MLX90640RawFrame *rawFrame, MLX90640Frame *fra
     rawFrame->process(frame, params, emissivity);
 }
 
+void MLX90640::reduceFrame(const MLX90640Frame *frame, MLX90640MemoryFrame *memoryFrame)
+{
+    memoryFrame->process(frame, memoryFrame);
+}
+
 bool MLX90640::readSpecificSubFrame(int index, unsigned short rawFrame[834])
 {
     const int maxRetry=3;

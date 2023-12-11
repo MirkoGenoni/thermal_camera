@@ -29,6 +29,8 @@
 #include <mxgui/misc_inst.h>
 #include <drivers/misc.h>
 #include <drivers/options_save.h>
+#include <drivers/memoryState.h>
+#include <drivers/image_save.h>
 #include <images/batt100icon.h>
 #include <images/batt75icon.h>
 #include <images/batt50icon.h>
@@ -59,7 +61,10 @@ Application::Application(Display& display)
       i2c(make_unique<I2C1Master>(sen_sda::getPin(),sen_scl::getPin(),1000)),
       sensor(make_unique<MLX90640>(i2c.get())), usb(make_unique<USBCDC>(Priority()))
 {
-    loadOptions(&ui.options,sizeof(ui.options));
+    memoryState = new MemoryState();
+    memoryState->scanMemory(sizeof(ui.options));
+    unsigned int settingsAddress = memoryState->getSettingAddress();
+    loadOptions(&ui.options,sizeof(ui.options), settingsAddress);
     if(sensor->setRefresh(refreshFromInt(ui.options.frameRate))==false)
         puts("Error setting framerate");
     display.setBrightness(ui.options.brightness * 6);
@@ -71,6 +76,7 @@ void Application::run()
     sensorThread = Thread::create(Application::sensorThreadMainTramp, 2048U, Priority(MAIN_PRIORITY+1), static_cast<void*>(this), Thread::JOINABLE);
     //Low priority for processing, prevents display writes from starving
     Thread *processThread = Thread::create(Application::processThreadMainTramp, 2048U, Priority(MAIN_PRIORITY-1), static_cast<void*>(this), Thread::JOINABLE);
+    writeThread = Thread::create(Application::writeMemoryMainTramp, 3072U, Priority(MAIN_PRIORITY-1), static_cast<void*>(this), Thread::JOINABLE);
 
     //Drop first frame before starting the render thread
     MLX90640Frame *processedFrame=nullptr;
@@ -107,6 +113,12 @@ void Application::run()
     iprintf("usbOutputThread joined\n");
     usbInteractiveThread->join();
     iprintf("usbInteractiveThread joined\n");
+    if(frameWriteBuffer.isFull()) frameWriteBuffer.reset();
+    if(frameWriteBuffer.isEmpty()) frameWriteBuffer.put(nullptr);
+    ui.writeOut=true;
+    writeThread->wakeup();
+    writeThread->join();
+    iprintf("writing thread joined\n");
 }
 
 ButtonState Application::checkButtons()
@@ -131,9 +143,51 @@ void Application::setPause(bool pause)
     sensorThread->wakeup();
 }
 
+void Application::setWriteOut()
+{
+    writeThread->wakeup();
+}
+
 void Application::saveOptions(ApplicationOptions& options)
 {
-    ::saveOptions(&options,sizeof(options));
+    ::saveOptions(memoryState, &options,sizeof(options));
+}
+
+void *Application::writeMemoryMainTramp(void* p)
+{
+    static_cast<Application *>(p)->writeMemoryThreadMain();
+    return nullptr;
+}
+
+void Application::writeMemoryThreadMain()
+{
+    while(ui.lifecycle != UI::Quit)
+    {
+        while(ui.writeOut==false) Thread::wait();
+        std::unique_ptr<MLX90640MemoryFrame> memoryFrame;
+        {
+            MLX90640MemoryFrame *test = nullptr;
+            frameWriteBuffer.get(test);
+            memoryFrame.reset(test);
+        }
+
+        if(!memoryFrame){
+            puts("Shutting down, not saving");
+            continue;
+        }
+        // int x=0;
+        // char string[32];
+        // for(auto data: memoryFrame->memoryImage){
+        //     sniprintf(string, sizeof(string), "%d: %u", x, data);
+        //     puts(string);
+        //     x++;
+        // }
+        ::saveImage(memoryState, std::move(memoryFrame), 720);
+        
+        // puts("Written");
+        
+        ui.writeOut=false;
+    }
 }
 
 void *Application::sensorThreadMainTramp(void *p)
@@ -193,6 +247,27 @@ void Application::processThreadMain()
         sensor->processFrame(rawFrame,processedFrame,ui.options.emissivity);
         processedFrameQueue.put(processedFrame);
         usbOutputQueue.put(rawFrame);
+        if(ui.writeOut==false){
+            //Memory write thread is sleeping, freeing memory before allocating new one
+            if(frameWriteBuffer.isFull()){ 
+                std::unique_ptr<MLX90640MemoryFrame> rawFrame;
+                {
+                    MLX90640MemoryFrame *pointer=nullptr;
+                    frameWriteBuffer.get(pointer);
+                    rawFrame.reset(pointer);
+                }
+                rawFrame.reset();
+                frameWriteBuffer.reset();
+            }
+
+            auto* memoryFrame = new MLX90640MemoryFrame;
+            
+            // auto t3=getTime();
+            sensor->reduceFrame(processedFrame, memoryFrame);
+            // auto t4=getTime();
+            // iprintf("reducing time: %lld\n", t4-t3);
+            frameWriteBuffer.put(memoryFrame);
+        }
         //auto t2=getTime();
         //iprintf("process = %lld\n",t2-t1);
     }

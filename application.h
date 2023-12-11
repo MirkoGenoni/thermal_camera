@@ -33,6 +33,7 @@
 #include <drivers/stm32f2_f4_i2c.h>
 #include <drivers/mlx90640.h>
 #include <drivers/hwmapping.h>
+#include <drivers/memoryState.h>
 #include <drivers/usb_tinyusb.h>
 #include "renderer.h"
 #include "applicationui.h"
@@ -56,7 +57,11 @@ public:
 
     void setPause(bool pause);
 
+    void setWriteOut();
+
     void saveOptions(ApplicationOptions& options);
+    
+    MemoryState *memoryState;
     
 private:
     Application(const Application&)=delete;
@@ -73,6 +78,9 @@ private:
     static void *renderThreadMainTramp(void *p);
     inline void renderThreadMain();
 
+    static void *writeMemoryMainTramp(void *p);
+    inline void writeMemoryThreadMain();
+
     static void *usbThreadMainTramp(void *p);
     inline void usbThreadMain();
 
@@ -80,6 +88,7 @@ private:
     inline void usbFrameOutputThreadMain();
 
     miosix::Thread *sensorThread;
+    miosix::Thread *writeThread;
     mxgui::Display& display;
     UI ui;
     int prevBatteryVoltage=42; //4.2V
@@ -90,6 +99,6 @@ private:
     miosix::Queue<MLX90640Frame*, 1> processedFrameQueue;
     volatile bool usbDumpRawFrames=false;
     miosix::Queue<MLX90640RawFrame*, 1> usbOutputQueue;
-
+    miosix::Queue<MLX90640MemoryFrame*, 1> frameWriteBuffer;
     const unsigned long long usbWriteTimeout = 50ULL * 1000000ULL; // 50ms
 };

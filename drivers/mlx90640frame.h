@@ -94,3 +94,43 @@ public:
         }
     }
 };
+
+class MLX90640MemoryFrame
+{
+    public:
+        unsigned short memoryImage[720];
+
+        /**
+         * Processes a standard frame of 1536 bytes into a frame of 1440 byte discarding the MSB of every pixel
+         * in order to reduce the number of pages used inside the flash memory.
+         * \param frame is a pointer to the original frame object
+         * \param memoryFrame is a pointer to an object allocated by the caller in which the new frame will be stored
+        */
+        void process(const MLX90640Frame *frame, MLX90640MemoryFrame *memoryFrame){
+            uint16_t current_mask = 0x8000;
+
+            int z = 15;
+            int f = 0;
+            unsigned short current;
+            unsigned short next;
+
+            for (int y = 0; y < 720; y++)
+            {
+                if (z==0)
+                {
+                    z = 15;
+                    current_mask = 0x0000;
+                    f++;
+                }
+
+                current_mask = current_mask | 1 << z;
+
+                current = frame->temperature[f] << 1;
+                next = frame->temperature[f+1] << 1;
+
+                memoryFrame->memoryImage[y] = current << (15 - z) | (next & current_mask) >> z;
+                f++;
+                z--;
+            }
+        }
+};

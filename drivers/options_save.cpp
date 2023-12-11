@@ -32,18 +32,20 @@
 #include <drivers/flash.h>
 #include <util/crc16.h>
 #include <util/util.h>
+#include "memoryState.h"
 
 using namespace std;
 using namespace miosix;
 
 struct Header
 {
+    unsigned char type;        //0x00 if settings, 0x01 if image, 0xff if not type
     unsigned char written;     //0x00 if written,     0xff if not written
     unsigned char invalidated; //0x00 if invalidated, 0xff if not invalidated
     unsigned short crc;
 };
 
-void loadOptions(void *options, int optionsSize)
+void loadOptions(void *options, int optionsSize, unsigned int address)
 {
     puts("loadOptions");
     auto& flash=Flash::instance();
@@ -51,38 +53,17 @@ void loadOptions(void *options, int optionsSize)
     unsigned int size=optionsSize+sizeof(Header);
     assert(size<flash.pageSize());
     auto buffer=make_unique<unsigned char[]>(size);
-    auto *header=reinterpret_cast<Header*>(buffer.get());
 
-    for(unsigned int i=0;i<flash.sectorSize();i+=flash.pageSize())
+    if(flash.read(address,buffer.get(),size)==false)
     {
-        if(flash.read(i,buffer.get(),size)==false)
-        {
-            iprintf("Failed to read address 0x%x\n",i);
-            break; //Read error, abort
-        }
-        //memDump(buffer.get(),size);
-        if(header->written!=0)
-        {
-            iprintf("Unwritten option @ address 0x%x\n",i);
-            break; //Reached unwritten, abort
-        }
-        if(header->invalidated==0)
-        {
-            iprintf("Invalidated option @ address 0x%x\n",i);
-            continue; //Skip invalidated entry
-        }
-        if(header->crc!=crc16(buffer.get()+sizeof(Header),optionsSize))
-        {
-            iprintf("Corrupted option @ address 0x%x\n",i);
-            continue; //Corrupted
-        }
-        memcpy(options,buffer.get()+sizeof(Header),optionsSize);
-        iprintf("Loaded options from address 0x%x\n",i);
-        break;
+        iprintf("Failed to read address 0x%x\n",address);
+        //Read error, abort
     }
+    memcpy(options,buffer.get()+sizeof(Header),optionsSize);
+    iprintf("Loaded options from address 0x%x\n",address);
 }
 
-void saveOptions(void *options, int optionsSize)
+void saveOptions(MemoryState* state, void *options, int optionsSize)
 {
     puts("saveOptions");
     auto& flash=Flash::instance();
@@ -92,47 +73,34 @@ void saveOptions(void *options, int optionsSize)
     auto buffer=make_unique<unsigned char[]>(size);
     auto *header=reinterpret_cast<Header*>(buffer.get());
 
-    int found=-1;
-    for(unsigned int i=0;i<flash.sectorSize();i+=flash.pageSize())
-    {
-        if(flash.read(i,buffer.get(),size)==false)
-        {
-            iprintf("Failed to read address 0x%x\n",i);
-            return;
-        }
-        if(header->invalidated==0) continue;
-        if(header->written==0)
-        {
-            //Found valid written data
-            if(memcmp(buffer.get()+sizeof(Header),options,optionsSize)==0)
-            {
-                puts("Options did not change, not saving");
-                return;
-            }
-            //And it differs, invalidate
-            iprintf("Invalidating entry @ address 0x%x\n",i);
-            header->invalidated=0;
-            if(flash.write(i,buffer.get(),sizeof(Header))==false)
-            {
-                iprintf("Failed to invalidate address 0x%x\n",i);
-                return;
-            }
-            continue;
-        }
-        //Not invalidated and not written, we found one sector
-        found=i;
-        break;
-    }
-    if(found==-1)
+    unsigned int newAddress = state->getFreeAddress();
+
+    if(newAddress==3840) //sector full, cleaning memory
     {
         puts("All entries full, erasing sector 0");
         flash.eraseSector(0);
-        found=0;
+        flash.eraseSector(1);
+        newAddress=0;
+        state->setFirstMemoryAddressFree(0);
+        state->setOccupiedMemory(1);
     }
+
+    header->type=0;
     header->written=0;
     header->invalidated=0xff;
     header->crc=crc16(options,optionsSize);
     memcpy(buffer.get()+sizeof(Header),options,optionsSize);
-    iprintf("Writing options @ address 0x%x\n",found);
-    if(flash.write(found,buffer.get(),size)==false) puts("Failed writing options");
+    iprintf("Writing options @ address 0x%x\n",newAddress);
+
+    if(flash.write(newAddress,buffer.get(),size)==false) puts("Failed writing options");
+
+    //necessary read, otherwise consecutive writes aren't finalized
+    //TODO: understand on drivers how to remove this
+    if(flash.read(newAddress,buffer.get(),size)==false)
+    {
+        iprintf("Failed to read address 0x%x\n", newAddress);
+        return;
+    }
+    state->setSettingAddress(newAddress);
+    state->increaseMemoryAddressFree(flash.pageSize());
 }

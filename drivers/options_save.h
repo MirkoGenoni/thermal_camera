@@ -26,6 +26,7 @@
  ***************************************************************************/
 
 #pragma once
+#include "memoryState.h"
 
 /**
  * Try to load valid options from FLASH
@@ -35,11 +36,11 @@
  * \param options pointer to options data structure
  * \param data options data structure size, must be less than 256 bytes
  */
-void loadOptions(void *options, int optionsSize);
+void loadOptions(void *options, int optionsSize, unsigned int address);
 
 /**
  * Try to save options to FLASH. May fail in case of hardware errors.
  * \param options pointer to options data structure
  * \param data options data structure size, must be less than 256 bytes
  */
-void saveOptions(void *options, int optionsSize);
+void saveOptions(MemoryState* state, void *options, int optionsSize);
