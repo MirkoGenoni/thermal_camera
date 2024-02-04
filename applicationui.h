@@ -395,7 +395,8 @@ template<class IOHandler>
 void ApplicationUI<IOHandler>::enterCamera(mxgui::DrawingContext& dc)
 {
     state=Camera;
-    drawStaticPartOfMainScreen(dc);
+    dc.clear(mxgui::black);
+    drawStaticTopBar(dc, false);
     drawFrame(dc);
     onBtn.ignoreUntilNextPress();
     upBtn.ignoreUntilNextPress();
