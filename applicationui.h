@@ -138,13 +138,19 @@ private:
 
     void enterMenu(mxgui::DrawingContext& dc);
 
-    void _drawMenuEntry(mxgui::DrawingContext& dc, int i, const char *label, const char *value=NULL);
+    void _drawMenuOptionEntry(mxgui::DrawingContext& dc, int i, const char *label, const char *value=NULL);
 
     void drawMenuEntry(mxgui::DrawingContext& dc, int id);
 
     void drawStaticTopBar(mxgui::DrawingContext& dc, bool save);
 
     void updateMenu(mxgui::DrawingContext& dc);
+
+    void enterOptions(mxgui::DrawingContext& dc);
+
+    void updateOptions(mxgui::DrawingContext& dc);
+
+    void drawOptionsEntry(mxgui::DrawingContext& dc, int id);
 
     void enterCamera(mxgui::DrawingContext& dc);
 
@@ -178,21 +184,30 @@ private:
         Main,
         Menu,
         Camera,
+        Option,
         Shutdown
     };
     State state = State::BootMsg;
     enum MenuEntry
     {
         Back = 0,
+        Options,
+        CameraMenu,
+        ClearMemory,
+        NumEntries
+    };
+    
+    enum OptionsEntry
+    {
+        BackOptions = 0,
         Emissivity,
         FrameRate,
         Brightness,
-        CameraMenu,
-        ClearMemory,
         SaveChanges,
-        NumEntries
+        NumOptEntries
     };
     int menuEntry;
+    int optionsEntry;
 };
 
 template<class IOHandler>
@@ -207,6 +222,7 @@ void ApplicationUI<IOHandler>::update()
         case Main: updateMain(dc); break;
         case Menu: updateMenu(dc); break;
         case Camera: updateCamera(dc); break;
+        case Option: updateOptions(dc); break;
         case Shutdown:
         default: break;
     }
@@ -222,7 +238,7 @@ void ApplicationUI<IOHandler>::updateFrame(MLX90640Frame *processedFrame)
         std::lock_guard<std::mutex> lock(lastFrameMutex);
         lastFrame = std::shared_ptr<MLX90640Frame>(processedFrame);
     }
-    if (state == Main || state == Menu || state == Camera)
+    if (state == Main || state == Menu || state == Camera || state == Option)
     {
         mxgui::DrawingContext dc(display);
         drawFrame(dc);
@@ -455,7 +471,21 @@ void ApplicationUI<IOHandler>::enterMenu(mxgui::DrawingContext& dc)
 }
 
 template<class IOHandler>
-void ApplicationUI<IOHandler>::_drawMenuEntry(mxgui::DrawingContext& dc, int i,
+void ApplicationUI<IOHandler>::enterOptions(mxgui::DrawingContext& dc)
+{
+    state = Option;
+    optionsEntry = BackOptions;
+    drawStaticPartOfMenuScreen(dc);
+    drawPauseIndicator(dc);
+    drawUSBConnectionIndicator(dc);
+    drawFrame(dc);
+    for (int i=0; i<NumOptEntries; i++) drawOptionsEntry(dc, i);
+    upBtn.ignoreUntilNextPress();
+    onBtn.ignoreUntilNextPress();
+}
+
+template<class IOHandler>
+void ApplicationUI<IOHandler>::_drawMenuOptionEntry(mxgui::DrawingContext& dc, int i,
     const char *label, const char *value)
 {
     const mxgui::Color selectedBGColor = mxgui::Color(to565(255,128,0));
@@ -464,8 +494,11 @@ void ApplicationUI<IOHandler>::_drawMenuEntry(mxgui::DrawingContext& dc, int i,
     const mxgui::Color unselectedFGColor = mxgui::white;
     const auto fontHeight = dc.getFont().getHeight();
     short top = 50+i*fontHeight;
-    if (i==menuEntry) dc.setTextColor(std::make_pair(selectedFGColor,selectedBGColor));
+
+    if (state==Menu && i==menuEntry) dc.setTextColor(std::make_pair(selectedFGColor,selectedBGColor));
+    else if (state==Option && i==optionsEntry) dc.setTextColor(std::make_pair(selectedFGColor,selectedBGColor));
     else dc.setTextColor(std::make_pair(unselectedFGColor,unselectedBGColor));
+
     if (value)
     {
         TextBox::draw(dc, mxgui::Point(0,top), mxgui::Point(74,top+fontHeight-1), label, 0, 0, 3, 0);
@@ -479,33 +512,44 @@ template<class IOHandler>
 void ApplicationUI<IOHandler>::drawMenuEntry(mxgui::DrawingContext& dc, int id)
 {
     dc.setFont(smallFont);
-    char buffer[8];
     switch (id) {
-        case Back: _drawMenuEntry(dc, Back, "Back"); break;
-        case Emissivity:
-            snprintf(buffer, 8, "%.2f", options.emissivity);
-            _drawMenuEntry(dc, Emissivity, "Emissivity", buffer);
-            break;
-        case FrameRate:
-            sniprintf(buffer, 8, "%d", options.frameRate);
-            _drawMenuEntry(dc, FrameRate, "Frame rate", buffer);
-            break;
-        case Brightness:
-            sniprintf(buffer, 8, "%d", options.brightness);
-            _drawMenuEntry(dc, Brightness, "Brightness", buffer);
-            break;
-        case SaveChanges:
-            _drawMenuEntry(dc, SaveChanges, "Save changes");
+        case Back: _drawMenuOptionEntry(dc, Back, "Back"); break;
+        case Options:
+            _drawMenuOptionEntry(dc, Options, "Options");
             break;
         case CameraMenu:
-            _drawMenuEntry(dc, CameraMenu, "Camera");
+            _drawMenuOptionEntry(dc, CameraMenu, "Camera");
             break;
         case ClearMemory:
-            _drawMenuEntry(dc, ClearMemory, "ClearMemory");
+            _drawMenuOptionEntry(dc, ClearMemory, "ClearMemory");
             break;
     }
 }
 
+template<class IOHandler>
+void ApplicationUI<IOHandler>::drawOptionsEntry(mxgui::DrawingContext& dc, int id)
+{
+    dc.setFont(smallFont);
+    char buffer[8];
+    switch (id) {
+        case BackOptions: _drawMenuOptionEntry(dc, BackOptions, "Back"); break;
+        case Emissivity:
+            snprintf(buffer, 8, "%.2f", options.emissivity);
+            _drawMenuOptionEntry(dc, Emissivity, "Emissivity", buffer);
+            break;
+        case FrameRate:
+            sniprintf(buffer, 8, "%d", options.frameRate);
+            _drawMenuOptionEntry(dc, FrameRate, "Frame rate", buffer);
+            break;
+        case Brightness:
+            sniprintf(buffer, 8, "%d", options.brightness);
+            _drawMenuOptionEntry(dc, Brightness, "Brightness", buffer);
+            break;
+        case SaveChanges:
+            _drawMenuOptionEntry(dc, SaveChanges, "Save changes");
+            break;
+    }
+}
 template<class IOHandler>
 void ApplicationUI<IOHandler>::updateMenu(mxgui::DrawingContext& dc)
 {
@@ -514,24 +558,8 @@ void ApplicationUI<IOHandler>::updateMenu(mxgui::DrawingContext& dc)
     {
         switch(menuEntry)
         {
-            case Emissivity:
-                if(options.emissivity>0.925) options.emissivity=0.05;
-                else options.emissivity+=0.05;
-                drawMenuEntry(dc, Emissivity);
-                break;
-            case FrameRate: 
-                if(options.frameRate>=16) options.frameRate=1;
-                else options.frameRate*=2;
-                drawMenuEntry(dc, FrameRate);
-                break;
-            case Brightness: 
-                if(options.brightness>=15) options.brightness=0;
-                else options.brightness+=1;
-                display.setBrightness(options.brightness * 6);
-                drawMenuEntry(dc, Brightness);
-                break;
-            case SaveChanges:
-                ioHandler.saveOptions(options);
+            case Options:
+                enterOptions(dc);
                 break;
             case CameraMenu:
                 enterCamera(dc);
@@ -550,6 +578,47 @@ void ApplicationUI<IOHandler>::updateMenu(mxgui::DrawingContext& dc)
         menuEntry=(menuEntry+1)%NumEntries;
         drawMenuEntry(dc, oldEntry);
         drawMenuEntry(dc, menuEntry);
+    }
+}
+
+template<class IOHandler>
+void ApplicationUI<IOHandler>::updateOptions(mxgui::DrawingContext& dc)
+{
+    drawUSBConnectionIndicator(dc);
+    if (onBtn.getAutorepeatEvent())
+    {
+        switch(optionsEntry)
+        {
+            case BackOptions:
+                enterMenu(dc);
+                return;
+            case Emissivity:
+                if(options.emissivity>0.925) options.emissivity=0.05;
+                else options.emissivity+=0.05;
+                drawOptionsEntry(dc, Emissivity);
+                break;
+            case FrameRate: 
+                if(options.frameRate>=16) options.frameRate=1;
+                else options.frameRate*=2;
+                drawOptionsEntry(dc, FrameRate);
+                break;
+            case Brightness: 
+                if(options.brightness>=15) options.brightness=0;
+                else options.brightness+=1;
+                display.setBrightness(options.brightness * 6);
+                drawOptionsEntry(dc, Brightness);
+                break;
+            case SaveChanges:
+                ioHandler.saveOptions(options);
+                break;
+        }
+    }
+    else if(upBtn.getAutorepeatEvent())
+    {
+        int oldEntry = optionsEntry;
+        optionsEntry=(optionsEntry+1)%NumOptEntries;
+        drawOptionsEntry(dc, oldEntry);
+        drawOptionsEntry(dc, optionsEntry);
     }
 }
 
@@ -576,7 +645,7 @@ void ApplicationUI<IOHandler>::drawFrame(mxgui::DrawingContext& dc)
         #if 0 && defined(_MIOSIX)
         auto t1 = miosix::getTime();
         #endif
-        bool smallCached=(state == Menu); //Cache now if the main thread changes it
+        bool smallCached=(state == Menu || state == Option); //Cache now if the main thread changes it
         bool camera=(state == Camera);
         if(smallCached==false) renderer->render(frame.get());
         else renderer->renderSmall(frame.get());
@@ -598,14 +667,14 @@ void ApplicationUI<IOHandler>::drawFrame(mxgui::DrawingContext& dc)
             renderer->legend(buffer,dc.getWidth());
             for(int y=124;y<=127;y++)
                 dc.scanLineBuffer(mxgui::Point(0,y),dc.getWidth());
-        } else if(camera == false){
+        } else if(smallCached==true){
             //For mxgui::point coordinates see ui-mockup-menu-screen.png
             renderer->drawSmall(dc,mxgui::Point(1,1));
             drawTemperature(dc,mxgui::Point(96,12),mxgui::Point(112,20),smallFont,
                             renderer->maxTemperature());
             drawTemperature(dc,mxgui::Point(96,25),mxgui::Point(112,33),smallFont,
                             renderer->minTemperature());
-        } else {
+        } else if(camera==true){
             renderer->draw(dc,mxgui::Point(1,13));       
             char remaining[16];
             unsigned int occupied = ioHandler.memoryState->getOccupiedMemory()/6;
