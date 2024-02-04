@@ -148,6 +148,11 @@ void Application::setWriteOut()
     writeThread->wakeup();
 }
 
+void Application::clearMemory()
+{
+    memoryState->clearMemory();
+    ::saveOptions(memoryState, &ui.options, sizeof(ui.options));
+}
 void Application::saveOptions(ApplicationOptions& options)
 {
     ::saveOptions(memoryState, &options,sizeof(options));

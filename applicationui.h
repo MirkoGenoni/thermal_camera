@@ -188,6 +188,7 @@ private:
         FrameRate,
         Brightness,
         CameraMenu,
+        ClearMemory,
         SaveChanges,
         NumEntries
     };
@@ -499,6 +500,9 @@ void ApplicationUI<IOHandler>::drawMenuEntry(mxgui::DrawingContext& dc, int id)
         case CameraMenu:
             _drawMenuEntry(dc, CameraMenu, "Camera");
             break;
+        case ClearMemory:
+            _drawMenuEntry(dc, ClearMemory, "ClearMemory");
+            break;
     }
 }
 
@@ -531,6 +535,9 @@ void ApplicationUI<IOHandler>::updateMenu(mxgui::DrawingContext& dc)
                 break;
             case CameraMenu:
                 enterCamera(dc);
+                break;
+            case ClearMemory:
+                ioHandler.clearMemory();
                 break;
             case Back:
                 enterMain(dc);

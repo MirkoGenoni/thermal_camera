@@ -60,6 +60,8 @@ public:
     void setWriteOut();
 
     void saveOptions(ApplicationOptions& options);
+
+    void clearMemory();
     
     MemoryState *memoryState;
     
