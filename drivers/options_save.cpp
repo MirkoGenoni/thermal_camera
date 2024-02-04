@@ -75,14 +75,12 @@ void saveOptions(MemoryState* state, void *options, int optionsSize)
 
     unsigned int newAddress = state->getFreeAddress();
 
-    if(newAddress==3840) //sector full, cleaning memory
+    if(newAddress==65280) //sector full, cleaning memory
     {
-        puts("All entries full, erasing sector 0");
-        flash.eraseSector(0);
-        flash.eraseSector(1);
+        puts("All entries full, erasing block 0");
+        flash.eraseBlock(0);
         newAddress=0;
         state->setFirstMemoryAddressFree(0);
-        state->setOccupiedMemory(1);
     }
 
     header->type=0;
@@ -93,14 +91,7 @@ void saveOptions(MemoryState* state, void *options, int optionsSize)
     iprintf("Writing options @ address 0x%x\n",newAddress);
 
     if(flash.write(newAddress,buffer.get(),size)==false) puts("Failed writing options");
-
-    //necessary read, otherwise consecutive writes aren't finalized
-    //TODO: understand on drivers how to remove this
-    if(flash.read(newAddress,buffer.get(),size)==false)
-    {
-        iprintf("Failed to read address 0x%x\n", newAddress);
-        return;
-    }
+    
     state->setSettingAddress(newAddress);
-    state->increaseMemoryAddressFree(flash.pageSize());
+    state->increaseMemoryAddressFree(newAddress, header->type, 0, 0, flash.pageSize());
 }

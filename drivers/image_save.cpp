@@ -25,11 +25,12 @@ void saveImage(MemoryState* state, std::unique_ptr<MLX90640MemoryFrame> image, i
     
     unsigned int size = sizeof(Image) + byteForImage;
     assert(size<=flash.pageSize()); // ensures that overhead + image can be contained in a page
+    iprintf("Image dimension: %d", size);
 
-    if(state->increaseOccupiedMemory(6)==false){ //check for enough free memory
-        iprintf("not enough memory\n");
-        return;
-    }
+    // if(state->increaseOccupiedMemory(6)==false){ //check for enough free memory
+    //     iprintf("not enough memory\n");
+    //     return;
+    // }
 
     // iprintf("Size: %d\n", size);
 
@@ -69,15 +70,8 @@ void saveImage(MemoryState* state, std::unique_ptr<MLX90640MemoryFrame> image, i
             return;
         }
 
-        //necessary read, otherwise consecutive writes aren't finalized
-        //TODO: understand on drivers how to remove this
-        if(flash.read(state->getFreeAddress(),buffer.get(),size)==false)
-        {
-            iprintf("Failed to read address 0x%x\n",state->getFreeAddress());
-            return;
-        }
 
-        state->increaseMemoryAddressFree(flash.pageSize());
+        state->increaseMemoryAddressFree(startAddress, ImageHeader->type, ImageHeader->id, ImageHeader->position, flash.pageSize());
 
         buffer.reset(nullptr);
     }
