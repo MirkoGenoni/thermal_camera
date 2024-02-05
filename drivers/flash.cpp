@@ -195,8 +195,13 @@ bool Flash::write(unsigned int addr, const void *data, int size)
     NVIC_DisableIRQ(DMA1_Stream4_IRQn);
 
     //Wait for last byte to be sent
+    volatile short temp;
     while((SPI2->SR & SPI_SR_TXE)==0) ;
     while(SPI2->SR & SPI_SR_BSY) ;
+
+    temp=SPI2->DR;
+    (void)temp;
+
     SPI2->CR1=0;
     SPI2->CR2=0;
     SPI2->CR1=SPI_CR1_SSM
@@ -205,7 +210,7 @@ bool Flash::write(unsigned int addr, const void *data, int size)
             | SPI_CR1_SPE;
     
     //Quirk: reset RXNE by reading DR, or a byte remains in the input buffer
-    volatile short temp=SPI1->DR;
+    temp=SPI1->DR;
     (void)temp;
     
     flash_cs::high();
