@@ -6,7 +6,7 @@ using namespace std;
 
 struct Page {
     unsigned short address;
-    unsigned short type;
+    unsigned char type;
     unsigned short id;
     unsigned char position;
     bool used;
@@ -41,7 +41,7 @@ class MemoryState {
             firstMemoryAddressFree = address;
         };
         
-        void increaseMemoryAddressFree(unsigned short address, unsigned char type, unsigned short id, unsigned char position, unsigned int increment);
+        void increaseMemoryAddressFree(unsigned int address, unsigned char type, unsigned short id, unsigned char position, unsigned int increment);
 
         void setSettingAddress(unsigned int address){
             settingsAddress= address;
@@ -55,14 +55,14 @@ class MemoryState {
         
         void scanMemory(int optionsSize);
 
-        void addPages(unsigned short address, unsigned char type, unsigned short id, unsigned char position);
+        void addPages(unsigned int address, unsigned char type, unsigned short id, unsigned char position);
 
         void clearMemory();
     private:
         unsigned int firstMemoryAddressFree=0;
         unsigned int settingsAddress=0;
         unsigned int totalMemory=16; //number of 256 bytes pages free
-        unsigned int occupiedMemory=63; // number of pages occupied
+        unsigned int occupiedMemory=64; // number of pages occupied
 
         shared_ptr<Sector> sector = make_shared<Sector>();
 };

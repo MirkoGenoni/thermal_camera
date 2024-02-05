@@ -61,7 +61,7 @@ void saveImage(MemoryState* state, std::unique_ptr<MLX90640MemoryFrame> image, i
         //     iprintf("Page: %u    original: %d: %u \t new: %d: %u\n", ImageHeaderAfter->position, i+j ,memoryFrame->memoryImage[i+j], i, test[i]);
         // }
         
-        int startAddress = state->getFreeAddress();
+        unsigned int startAddress = state->getFreeAddress();
         iprintf("Writing on address 0x%x\n",startAddress);
 
         if(flash.write(startAddress,buffer.get(),size)==false)

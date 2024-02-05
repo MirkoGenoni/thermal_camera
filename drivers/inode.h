@@ -1,5 +1,13 @@
 #include "memoryState.h" 
 
+struct InodeStruct
+{
+    unsigned short id;
+    unsigned short image_ids[11];
+    unsigned short freeable;
+    unsigned char content[189];
+};
+
 class Inode {
     public:
         void setPages(shared_ptr<Sector> sector){
