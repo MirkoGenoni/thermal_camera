@@ -94,7 +94,9 @@ void __attribute__((used)) SPI2txDmaHandlerImpl()
  */
 static unsigned char spi2sendRecv(unsigned char data=0)
 {
-    SPI2->DR=data;
+    SPI2->DR=data;    
+    
+    while((SPI2->SR & SPI_SR_TXE)==0) ;
     while((SPI2->SR & SPI_SR_RXNE)==0) ;
     return SPI2->DR;
 }
@@ -118,6 +120,7 @@ void Flash::eraseSector(unsigned int addr)
     spi2sendRecv((addr>>16) & 0xff);
     spi2sendRecv((addr>>8) & 0xff);
     spi2sendRecv(addr & 0xff);
+    while(SPI2->SR & SPI_SR_BSY) ;
     flash_cs::high();
 
     do Thread::sleep(20); while(readStatus() & 0x1); //Sector erase time ~60ms
@@ -151,11 +154,10 @@ bool Flash::write(unsigned int addr, const void *data, int size)
     //DMA1 stream 4 channel 0 = SPI2_TX
     
     error=false;
-
     //Wait until the SPI is busy, required otherwise the last byte is not
     //fully sent
-    while((SPI2->SR & SPI_SR_TXE)==0) ;
     while(SPI2->SR & SPI_SR_BSY) ;
+
     SPI2->CR1=0;
     SPI2->CR2=SPI_CR2_TXDMAEN;
     SPI2->CR1=SPI_CR1_SSM
@@ -195,12 +197,8 @@ bool Flash::write(unsigned int addr, const void *data, int size)
     NVIC_DisableIRQ(DMA1_Stream4_IRQn);
 
     //Wait for last byte to be sent
-    volatile short temp;
     while((SPI2->SR & SPI_SR_TXE)==0) ;
     while(SPI2->SR & SPI_SR_BSY) ;
-
-    temp=SPI2->DR;
-    (void)temp;
 
     SPI2->CR1=0;
     SPI2->CR2=0;
@@ -210,7 +208,7 @@ bool Flash::write(unsigned int addr, const void *data, int size)
             | SPI_CR1_SPE;
     
     //Quirk: reset RXNE by reading DR, or a byte remains in the input buffer
-    temp=SPI1->DR;
+    volatile short temp=SPI1->DR;
     (void)temp;
     
     flash_cs::high();
