@@ -43,7 +43,7 @@ void saveImage(MemoryState* state, std::unique_ptr<MLX90640MemoryFrame> image, i
         auto buffer=make_unique<unsigned char[]>(size);
 
         auto *ImageHeader=reinterpret_cast<Image*>(buffer.get());
-        ImageHeader->id=1;
+        ImageHeader->id = state->getCurrentImageId();
         ImageHeader->type=1;
         ImageHeader->position=y;
 
@@ -62,7 +62,7 @@ void saveImage(MemoryState* state, std::unique_ptr<MLX90640MemoryFrame> image, i
         // }
         
         unsigned int startAddress = state->getFreeAddress();
-        iprintf("Writing on address 0x%x\n",startAddress);
+        iprintf("Writing IMAGE on address 0x%x\n",startAddress);
 
         if(flash.write(startAddress,buffer.get(),size)==false)
         {
@@ -76,6 +76,7 @@ void saveImage(MemoryState* state, std::unique_ptr<MLX90640MemoryFrame> image, i
         buffer.reset(nullptr);
     }
 
+    state->increaseImageId();
     memoryFrame.reset();
     
     iprintf("saving\n");

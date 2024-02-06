@@ -4,7 +4,8 @@
 
 using namespace std;
 
-struct Page {
+struct Page
+{
     unsigned short address;
     unsigned char type;
     unsigned short id;
@@ -12,57 +13,78 @@ struct Page {
     bool used;
 };
 
-struct Sector {
+struct Sector
+{
     Page pages[63];
 };
 
-struct Test {
+struct Test
+{
     unsigned short id;
     unsigned short ids[10];
     unsigned char pages[189];
 };
 
-class MemoryState {
-    public:
-        unsigned int getFreeAddress(){
-            return firstMemoryAddressFree;
-        };
-        unsigned int getSettingAddress(){
-            return settingsAddress;
-        };
-        unsigned int getTotalMemory(){
-            return totalMemory;
-        };
-        unsigned int getOccupiedMemory(){
-            return occupiedMemory;
-        };
+class MemoryState
+{
+public:
+    unsigned int getFreeAddress()
+    {
+        return firstMemoryAddressFree;
+    };
+    unsigned int getSettingAddress()
+    {
+        return settingsAddress;
+    };
+    unsigned int getTotalMemory()
+    {
+        return totalMemory;
+    };
+    unsigned int getOccupiedMemory()
+    {
+        return occupiedMemory;
+    };
 
-        void setFirstMemoryAddressFree(unsigned int address){
-            firstMemoryAddressFree = address;
-        };
-        
-        void increaseMemoryAddressFree(unsigned int address, unsigned char type, unsigned short id, unsigned char position, unsigned int increment);
+    void setFirstMemoryAddressFree(unsigned int address)
+    {
+        firstMemoryAddressFree = address;
+    };
 
-        void setSettingAddress(unsigned int address){
-            settingsAddress= address;
-        };
-        
-        void setOccupiedMemory(unsigned int value){
-            occupiedMemory= value;
-        };
+    void increaseMemoryAddressFree(unsigned int address, unsigned char type, unsigned short id, unsigned char position, unsigned int increment);
 
-        bool increaseOccupiedMemory(unsigned int dimension);
-        
-        void scanMemory(int optionsSize);
+    void setSettingAddress(unsigned int address)
+    {
+        settingsAddress = address;
+    };
 
-        void addPages(unsigned int address, unsigned char type, unsigned short id, unsigned char position);
+    void setOccupiedMemory(unsigned int value)
+    {
+        occupiedMemory = value;
+    };
 
-        void clearMemory();
-    private:
-        unsigned int firstMemoryAddressFree=0;
-        unsigned int settingsAddress=0;
-        unsigned int totalMemory=16; //number of 256 bytes pages free
-        unsigned int occupiedMemory=64; // number of pages occupied
+    bool increaseOccupiedMemory(unsigned int dimension);
 
-        shared_ptr<Sector> sector = make_shared<Sector>();
+    void scanMemory(int optionsSize);
+
+    void addPages(unsigned int address, unsigned char type, unsigned short id, unsigned char position);
+
+    void clearMemory();
+
+    unsigned short getCurrentImageId()
+    {
+        return currentImageId;
+    }
+    void increaseImageId()
+    {
+        currentImageId++;
+    }
+
+private:
+    unsigned int firstMemoryAddressFree = 0;
+    unsigned int settingsAddress = 0;
+    unsigned int totalMemory = 16;    // number of 256 bytes pages free
+    unsigned int occupiedMemory = 64; // number of pages occupied
+
+    unsigned short currentImageId = -1;
+    shared_ptr<Sector> sector = make_shared<Sector>();
 };

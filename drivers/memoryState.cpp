@@ -112,7 +112,7 @@ void MemoryState::scanMemory(int optionsSize){
 
     bool optionsFound=false;
 
-    unsigned short unmarkedAddress = 0;
+    unsigned int unmarkedAddress = 0;
 
     //FIND FIRST FREE SECTOR
     for(unsigned int i=(4*flash.sectorSize())-flash.pageSize();i<flash.size(); i+=4*flash.sectorSize()){
@@ -121,21 +121,21 @@ void MemoryState::scanMemory(int optionsSize){
             iprintf("Failed to read address 0x%x\n",i);
             break; //Read error, abort
         }
+        if (header->type == 2)
+        {
+            inodeFound = !inodeFound;
+            oldInodeAddress = i;
+        }
         if(header->type==0xff && headerImage->type==0xff){
             unmarkedAddress=i;
             iprintf("first sector free: 0x%d\n", i);
             break;
-        }        
-        if (header->type == 2)
-        {
-            inodeFound = !inodeFound;
-            oldInodeAddress = unmarkedAddress;
         }
     }
 
     //cycle through all the occupied sector if not already covered by inode
     for(int j=64; j>0; j--){
-        if(flash.read(unmarkedAddress,buffer.get(), optionsSize+sizeof(Header))==false)
+        if(flash.read(unmarkedAddress,buffer.get(), 256)==false)
         {
             iprintf("Failed to read address 0x%x\n",unmarkedAddress);
         }
@@ -156,6 +156,8 @@ void MemoryState::scanMemory(int optionsSize){
             iprintf("Image found @ address 0x%x\n",unmarkedAddress);
             // this->increaseOccupiedMemory(1);
             addPages(unmarkedAddress, headerImage->type, headerImage->id, headerImage->position);
+            if (currentImageId == -1)
+                currentImageId = headerImage->id + 1;
         }
 
         if(header->type==0){
@@ -189,6 +191,10 @@ void MemoryState::scanMemory(int optionsSize){
         unmarkedAddress=unmarkedAddress-flash.pageSize();
     }
 
+    if ((short)currentImageId == -1)
+        currentImageId = 0;
+
+    //PRINT MEMORY COVERED BY CURRENT INODE
     puts("MemoryState:\n");
 
     for(auto page: sector->pages){
@@ -201,22 +207,6 @@ void MemoryState::scanMemory(int optionsSize){
                 iprintf("type: Settings\n");
             } else if(page.type==2){
                 iprintf("type: Inode\n");
-                iprintf("type: Inode containing: \n");
-                int size = sizeof(InodeRead) + sizeof(InodeStruct);
-                auto buffer=make_unique<unsigned char[]>(size);
-                auto inode = reinterpret_cast<InodeStruct*>(buffer.get()+sizeof(InodeRead));
-                if(flash.read(oldInodeAddress,buffer.get(), size)==false)
-                {
-                    iprintf("Failed to read address 0x%x\n",oldInodeAddress);
-                    break; //Read error, abort
-                }
-
-                iprintf("inode id: %u " ,(unsigned short)inode->id);
-                for (int counter = 0; counter < 189; counter += 3)
-                {
-                    iprintf("type: %u", (unsigned short)inode->content[counter]);
-                    iprintf("address: %x", (((unsigned short)inode->content[counter + 1] << 8 | (unsigned short)inode->content[counter + 2]) << 8));
-                }
             } else {
                 iprintf("type: Imap\n");
             }
@@ -225,32 +215,41 @@ void MemoryState::scanMemory(int optionsSize){
         }
     }
     iprintf("memory occupied: %u\n", occupiedMemory);
-
-    unsigned int test3 = 0x3f00;
     
-    int sizeT = sizeof(InodeRead) + sizeof(InodeStruct);
+    //Reads and prints out first inode for DEBUG 
     auto bufferT=make_unique<unsigned char[]>(256);
-    auto headerT = reinterpret_cast<InodeRead*>(buffer.get());
-    auto inodeT = reinterpret_cast<InodeStruct*>(buffer.get()+sizeof(InodeRead));
-    if(flash.read(test3,bufferT.get(), sizeT)==false)
+    auto headerT = reinterpret_cast<InodeRead*>(bufferT.get());
+    auto inodeT = reinterpret_cast<InodeStruct*>(bufferT.get()+sizeof(InodeRead));
+
+    if(flash.read(oldInodeAddress, bufferT.get(), 255)==false)
     {
         iprintf("Failed to read address 0x%x\n",oldInodeAddress);
     }
-    if((unsigned short)headerT->type!=2) puts("Wrong address");
 
-    puts("WRITTEN INODE: ");
-    puts("");
-    iprintf("inode id: %u " ,(unsigned short)inodeT->id);
-    for (int counter = 0; counter < 189; counter += 3)
-    {
-        iprintf("type: %u\n", (unsigned short)inodeT->content[counter]);
-        iprintf("address: %x\n", (((unsigned short)inodeT->content[counter + 1] << 8 | (unsigned short)inodeT->content[counter + 2]) << 8));
+    if(headerT->type==2){
+        iprintf("TYPE READ: %u \n" , headerT->type);
+
+        puts("WRITTEN INODE: \n");
+        iprintf("inode id: %u " ,(unsigned short)inodeT->id);
+        for (int counter = 0; counter < 189; counter += 3)
+        {
+            iprintf("type: %u   ", (unsigned short)inodeT->content[counter]);
+            iprintf("address: %x\n", (((unsigned short)inodeT->content[counter + 1] << 8 | (unsigned short)inodeT->content[counter + 2]) << 8));
+        }
+        
+        puts("image_ids:");
+        for (int counter2 = 0; counter2 < 11; counter2++)
+        {
+            iprintf("%d: %u \n", counter2, *(inodeT->image_ids + counter2));
+        }
     }
 };
 
 void MemoryState::clearMemory(){
     auto& flash=Flash::instance();
     flash.eraseBlock(0);
+    flash.eraseBlock(flash.blockSize());
+    flash.eraseBlock(2*flash.blockSize());
     this->setFirstMemoryAddressFree(0);
     this->setOccupiedMemory(0);
 }

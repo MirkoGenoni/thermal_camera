@@ -75,14 +75,6 @@ void saveOptions(MemoryState* state, void *options, int optionsSize)
 
     unsigned int newAddress = state->getFreeAddress();
 
-    if(newAddress==65280) //sector full, cleaning memory
-    {
-        puts("All entries full, erasing block 0");
-        flash.eraseBlock(0);
-        newAddress=0;
-        state->setFirstMemoryAddressFree(0);
-    }
-
     header->type=0;
     header->written=0;
     header->invalidated=0xff;
@@ -91,7 +83,6 @@ void saveOptions(MemoryState* state, void *options, int optionsSize)
     iprintf("Writing options @ address 0x%x\n",newAddress);
 
     if(flash.write(newAddress,buffer.get(),size)==false) puts("Failed writing options");
-    
     state->setSettingAddress(newAddress);
     state->increaseMemoryAddressFree(newAddress, header->type, 0, 0, flash.pageSize());
 }
