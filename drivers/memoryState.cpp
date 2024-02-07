@@ -278,13 +278,13 @@ void MemoryState::scanMemory(int optionsSize){
     }
 
     //IMAP print for DEBUG
-    if(flash.read((unsigned int) 32512, bufferT.get(), 255)==false)
+    if(flash.read((unsigned int) 32768, bufferT.get(), 255)==false)
     {
         iprintf("Failed to read address 0x%x\n",oldInodeAddress);
     }
 
 
-    if ((unsigned short)header->type == 3)
+    if ((unsigned short)headerT->type == 3)
     {
         auto imap = reinterpret_cast<ImapStruct *>(bufferT.get() + sizeof(headerImage));
 
