@@ -7,13 +7,17 @@
 #include <util/util.h>
 #include "memoryState.h"
 #include "inode.h"
+#include "imap.h"
 
 using namespace std;
 using namespace miosix;
 
 unsigned short remaining = 63;
 bool inodeFound = false;
-unsigned short oldInodeAddress=0;
+unsigned int oldInodeAddress=0;
+unsigned short inodeId = 0;
+unsigned short imapId = 0;
+unsigned short imageIds[22];
 
 struct Header
 {
@@ -65,21 +69,42 @@ void MemoryState::increaseMemoryAddressFree(unsigned int address, unsigned char 
 
         unique_ptr<Inode> currentInode = make_unique<Inode>();
         currentInode->setPages(sector);
-        
+                //SAVE CURRENT IMAGE IDs INSIDE INODE INSIDE LOCAL VARIABLE
+        int counter2 = 0;
+        if (inodeFound == true)
+            counter2 = 11;
+
+        for (auto data : sector->pages)
+        {
+            if (data.type ==1 && (counter2 == 0 || counter2 == 11 || data.id != imageIds[counter2 - 1]))
+            {
+                imageIds[counter2] = data.id;
+                counter2++;
+            }
+        }
+
         currentInode->writeInodeToMemory(firstMemoryAddressFree);
         sector.reset(new Sector());
         setOccupiedMemory(0);
 
         if(inodeFound==true){
             //create map with previous inodes addresses inside first address of new data block
-            unsigned short inodeAddresses[2] = {oldInodeAddress, (unsigned short) firstMemoryAddressFree};
-
+            unsigned int inodeAddresses[2] = {oldInodeAddress, firstMemoryAddressFree};
+            
             firstMemoryAddressFree += 256;
             //generate imap and write to memory
-            unique_ptr<Imap> test2 = make_unique<Imap>();
+            unique_ptr<Imap> imap = make_unique<Imap>();
+            imapId = inodeId / 2;
 
-            //ONLY TEST PRINT, TODO: add imap
-            test2->writeImapToMemory(inodeAddresses);
+            imap->writeImapToMemory(imapId, inodeAddresses, imageIds, firstMemoryAddressFree);
+
+            // add imap to current inode
+            sector->pages[0].address = firstMemoryAddressFree >> 8;
+            sector->pages[0].type = (unsigned short)3;
+            sector->pages[0].used = true;
+
+            occupiedMemory++;
+
             inodeFound = false;
         }
         else
@@ -123,8 +148,16 @@ void MemoryState::scanMemory(int optionsSize){
         }
         if (header->type == 2)
         {
+            auto inode = reinterpret_cast<InodeStruct *>(buffer.get() + sizeof(headerImage));
             inodeFound = !inodeFound;
             oldInodeAddress = i;
+            if (inodeFound)
+            {
+                for (int i = 0; i < 11; i++)
+                {
+                    imageIds[i] = inode->image_ids[i];
+                }
+            }
         }
         if(header->type==0xff && headerImage->type==0xff){
             unmarkedAddress=i;
@@ -242,6 +275,38 @@ void MemoryState::scanMemory(int optionsSize){
         {
             iprintf("%d: %u \n", counter2, *(inodeT->image_ids + counter2));
         }
+    }
+
+    //IMAP print for DEBUG
+    if(flash.read((unsigned int) 32512, bufferT.get(), 255)==false)
+    {
+        iprintf("Failed to read address 0x%x\n",oldInodeAddress);
+    }
+
+
+    if ((unsigned short)header->type == 3)
+    {
+        auto imap = reinterpret_cast<ImapStruct *>(bufferT.get() + sizeof(headerImage));
+
+        iprintf("imap id: %d\n", (unsigned short)imap->id);
+
+        iprintf("Inode locations: ");
+
+        iprintf("address #0: %d", (unsigned int)(imap->inode_addresses[0]<<8));
+        iprintf("address #1: %d", (unsigned int)(imap->inode_addresses[1]<<8));
+
+        puts("");
+        int counter = 0;
+        for (auto id : imap->image_ids)
+        {
+            if (counter == 0)
+                iprintf("inode 0 ids: ");
+            if (counter == 11)
+                iprintf("\ninode 1 ids: ");
+            iprintf("%d ", id);
+            counter++;
+        }
+        puts("");
     }
 };
 

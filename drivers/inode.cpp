@@ -54,8 +54,3 @@ void Inode::writeInodeToMemory(unsigned int address)
         return;
     }
 }
-
-void Imap::writeImapToMemory(unsigned short *address)
-{
-    iprintf("Addresses of inodes: %d, %d", address[0], address[1]);
-}

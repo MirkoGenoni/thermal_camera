@@ -24,6 +24,7 @@ drivers/mlx90640.cpp drivers/MLX90640_API.cpp      \
 drivers/flash.cpp drivers/options_save.cpp         \
 drivers/usb_tinyusb.cpp    \
 drivers/memoryState.cpp drivers/image_save.cpp     \
+drivers/inode.ccp drivers/imap.cpp\
 
 IMG :=  \
 images/batt0icon.png \
