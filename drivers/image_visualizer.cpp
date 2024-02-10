@@ -280,3 +280,100 @@ void nextImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *sta
         }
     }
 }
+
+void insertPrev(std::list<std::unique_ptr<ImagesFound>> &found, unsigned short id, unsigned int inodeAddress, unsigned short imapAddress)
+{
+    std::list<std::unique_ptr<ImagesFound>>::iterator it;
+
+    for (it = found.begin(); it != found.end(); ++it)
+    {
+        if ((*it).get()->id == id && (*it).get()->inode[(*it).get()->inodesNum] != inodeAddress)
+        {
+            (*it).get()->inode[(*it).get()->inodesNum] = inodeAddress;
+            return;
+        }
+    }
+
+    auto image = make_unique<ImagesFound>();
+    image->id = id;
+    image->inode[image->inodesNum] = inodeAddress;
+    image->inodesNum += 1;
+
+    if (found.size() == 5 && id < found.begin()->get()->id)
+    {
+        found.push_front(std::move(image));
+    }
+    else
+    {
+        auto secondElement = std::next(found.begin(), 1);
+        if (id < secondElement->get()->id && id > found.begin()->get()->id)
+        {
+            found.insert(secondElement, std::move(image));
+            found.pop_front();
+        }
+    }
+}
+
+void prevImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *state)
+{
+    std::list<std::unique_ptr<ImagesFound>>::iterator it;
+
+    for (auto data : state->getSectorState()->pages)
+    {
+        if (data.type == 1)
+        {
+            insertPrev(foundL, data.id, 0, 0);
+        }
+    }
+
+    auto &flash = Flash::instance();
+    auto buffer = make_unique<unsigned char[]>(256);
+    auto imap = reinterpret_cast<ImapStruct *>(buffer.get() + sizeof(InodeRead));
+    std::cout << "Need to search in another imap\n";
+
+    // Address of the last imap
+    unsigned int imapAddress = state->getFreeAddress() & 0xffff8000;
+
+    // Search for inodes of first five elements
+    while (imapAddress > 0)
+    {
+        if (flash.read(imapAddress, buffer.get(), 256) == false)
+        {
+            std::cout << "Error Reading 0x" << hex << imapAddress << std::endl;
+        }
+
+        int counter = 0;
+        for (auto id : imap->image_ids)
+        {
+            if (counter < 11)
+            {
+
+                insertPrev(foundL, id, imap->inode_addresses[0], imapAddress);
+            }
+            else
+            {
+                insertPrev(foundL, id, imap->inode_addresses[1], imapAddress);
+            }
+            counter++;
+        }
+        imapAddress -= 32768;
+    }
+
+    if (foundL.size() == 6)
+    {
+        foundL.pop_back();
+        searchFrameAddresses(foundL);
+    }
+    else
+    {
+        iprintf("\nNO NEED TO UPDATE\n");
+        for (it = foundL.begin(); it != foundL.end(); ++it)
+        {
+            iprintf("Image: %d", (*it).get()->id);
+            for (int i = 0; i < 6; i++)
+            {
+                iprintf("Address %d: 0x%x", i, (*it).get()->framesAddr[i]);
+            }
+        }
+    }
+}
