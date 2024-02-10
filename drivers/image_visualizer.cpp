@@ -36,6 +36,65 @@ struct ImagesFound
     unsigned int framesAddr[6];
 };
 
+void searchFrameAddresses(std::list<std::unique_ptr<ImagesFound>> &foundL)
+{
+    std::list<std::unique_ptr<ImagesFound>>::iterator it;
+    // Cycle through inode addresses and remove duplicates in order to reduce memory reading
+    std::set<unsigned int> unique_inode_addresses;
+
+    for (it = foundL.begin(); it != foundL.end(); it++)
+    {
+        if (it->get()->inode[0] != 0)
+            unique_inode_addresses.insert((*it).get()->inode[0] << 8);
+        if (it->get()->inode[1] != 0)
+            unique_inode_addresses.insert((*it).get()->inode[1] << 8);
+    }
+
+    auto &flash = Flash::instance();
+    auto buffer = make_unique<unsigned char[]>(256);
+    auto inode = reinterpret_cast<InodeStruct *>(buffer.get() + sizeof(InodeStruct));
+
+    auto bufferImage = make_unique<unsigned char[]>(256);
+    auto image = reinterpret_cast<Image *>(bufferImage.get());
+
+    // Search addresses of frames of first five elements and adds them to data structure
+    for (auto inodeAddress : unique_inode_addresses)
+    {
+        if (flash.read(inodeAddress, buffer.get(), 256) == false)
+        {
+            iprintf("Error Reading 0x%x", inodeAddress);
+        }
+        for (int i = 0; i < 189; i += 3)
+        {
+            if (inode->content[i] == 1)
+            {
+                unsigned int imageAddress = (inode->content[i + 1] << 8 | inode->content[i + 2]) << 8;
+                if (flash.read(imageAddress, bufferImage.get(), 256) == false)
+                {
+                    iprintf("Error Reading 0x%x", imageAddress);
+                }
+
+                for (it = foundL.begin(); it != foundL.end(); ++it)
+                {
+                    if ((*it).get()->id == image->id)
+                    {
+                        (*it).get()->framesAddr[image->position] = imageAddress;
+                    }
+                }
+            }
+        }
+    }
+
+    for (it = foundL.begin(); it != foundL.end(); ++it)
+    {
+        std::cout << "Image: " << dec << (*it).get()->id << std::endl;
+        for (int i = 0; i < 6; i++)
+        {
+            std::cout << "Address " << i << ": 0x" << hex << (*it).get()->framesAddr[i] << std::endl;
+        }
+    }
+}
+
 void insertElement(std::list<std::unique_ptr<ImagesFound>> &found, unsigned short id, unsigned int inodeAddress, unsigned int imapAddress)
 {
     std::list<std::unique_ptr<ImagesFound>>::iterator it;
@@ -90,7 +149,6 @@ void searchImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *s
     auto &flash = Flash::instance();
     auto buffer = make_unique<unsigned char[]>(256);
     auto imap = reinterpret_cast<ImapStruct *>(buffer.get() + sizeof(InodeRead));
-    auto inode = reinterpret_cast<InodeStruct *>(buffer.get() + sizeof(InodeRead));
 
     // Address of the last imap
     unsigned int imapAddress = state->getFreeAddress() & 0xffff8000;
@@ -122,59 +180,103 @@ void searchImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *s
         imapAddress -= 32768;
     }
 
-    // DEBUG ON IMAGES AND INODES FOUND
-    // for (it = foundL.begin(); it != foundL.end(); ++it)
-    // {
-    //     iprintf("Id: %u", (*it).get()->id);
-    //     iprintf("Address inode 0: %x", ((*it).get()->inode[0] << 8));
-    // }
+    searchFrameAddresses(foundL);
+}
 
-    auto bufferImage = make_unique<unsigned char[]>(256);
-    auto image = reinterpret_cast<Image *>(bufferImage.get());
-    auto effectiveImage = reinterpret_cast<unsigned short *>(buffer.get() + sizeof(Image));
-
-    // Cycle through inode addresses and remove duplicates in order to reduce memory reading
-    std::set<unsigned int> unique_inode_addresses;
-    for (it = foundL.begin(); it != foundL.end(); ++it)
+void insertNext(std::list<std::unique_ptr<ImagesFound>> &found, unsigned short id, unsigned int inodeAddress, unsigned int imapAddress)
+{
+    std::list<std::unique_ptr<ImagesFound>>::iterator it;
+    for (it = found.begin(); it != found.end(); ++it)
     {
-        unique_inode_addresses.insert((*it).get()->inode[0] << 8);
+        if ((*it).get()->id == id && (*it).get()->inode[0] != inodeAddress)
+        {
+            (*it).get()->inode[(*it).get()->inodesNum] = inodeAddress;
+            return;
+        }
     }
 
-    // Search addresses of frames of first five elements and adds them to data structure
-    for (auto inodeAddress : unique_inode_addresses)
-    {
-        if (flash.read(inodeAddress, buffer.get(), 256) == false)
-        {
-            iprintf("Error Reading 0x%x", inodeAddress);
-        }
-        for (int i = 0; i < 189; i += 3)
-        {
-            if (inode->content[i] == 1)
-            {
-                unsigned int imageAddress = (inode->content[i + 1] << 8 | inode->content[i + 2]) << 8;
-                if (flash.read(imageAddress, bufferImage.get(), 256) == false)
-                {
-                    iprintf("Error Reading 0x%x", imageAddress);
-                }
+    auto image = make_unique<ImagesFound>();
+    image->id = id;
+    image->inode[image->inodesNum] = inodeAddress;
+    image->inodesNum += 1;
 
-                for (it = foundL.begin(); it != foundL.end(); ++it)
-                {
-                    if ((*it).get()->id == image->id)
-                    {
-                        (*it).get()->framesAddr[image->position] = imageAddress;
-                    }
-                }
+    auto last = std::prev(found.end(), 1);
+    if (found.size() == 5 && id > last->get()->id)
+    {
+        found.push_back(std::move(image));
+    }
+    else
+    {
+        auto secondToLast = std::prev(found.end(), 2);
+
+        if (id > secondToLast->get()->id && id < last->get()->id)
+        {
+            found.insert(last, std::move(image));
+            found.pop_back();
+        }
+    }
+}
+
+void nextImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *state)
+{
+    std::list<std::unique_ptr<ImagesFound>>::iterator it;
+
+    for (auto data : state->getSectorState()->pages)
+    {
+        if (data.type == 1)
+        {
+            insertNext(foundL, data.id, 0, 0);
+        }
+    }
+
+    auto &flash = Flash::instance();
+    auto buffer = make_unique<unsigned char[]>(256);
+    auto imap = reinterpret_cast<ImapStruct *>(buffer.get() + sizeof(InodeRead));
+    std::cout << "Need to search in another imap\n";
+
+    // Address of the last imap
+    unsigned int imapAddress = state->getFreeAddress() & 0xffff8000;
+
+    // Search for inodes of first five elements
+    while (imapAddress > 0)
+    {
+        if (flash.read(imapAddress, buffer.get(), 256) == false)
+        {
+            std::cout << "Error Reading 0x" << hex << imapAddress << std::endl;
+        }
+
+        int counter = 0;
+        for (auto id : imap->image_ids)
+        {
+            if (counter < 11)
+            {
+
+                insertNext(foundL, id, imap->inode_addresses[0], imapAddress);
+            }
+            else
+            {
+                insertNext(foundL, id, imap->inode_addresses[1], imapAddress);
+            }
+            counter++;
+        }
+        imapAddress -= 32768;
+    }
+
+    if (foundL.size() == 6)
+    {
+        foundL.pop_front();
+        searchFrameAddresses(foundL);
+    }
+    else
+    {
+        iprintf("\nNO NEED TO UPDATE\n");
+        for (it = foundL.begin(); it != foundL.end(); ++it)
+        {
+            iprintf("Image: %d", (*it).get()->id);
+            for (int i = 0; i < 6; i++)
+            {
+                iprintf("Address %d: 0x%x", i, (*it).get()->framesAddr[i]);
             }
         }
     }
-
-    // DEBUG print image frame addresses
-    // for (it = foundL.begin(); it != foundL.end(); ++it)
-    // {
-    //     iprintf("Image: %u", (*it).get()->id);
-    //     for (int i = 0; i < 6; i++)
-    //     {
-    //         iprintf("Address %D: 0x%x ", i, (*it).get()->framesAddr[i]);
-    //     }
-    // }
 }
