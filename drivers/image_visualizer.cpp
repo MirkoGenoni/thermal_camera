@@ -36,7 +36,7 @@ struct ImagesFound
     unsigned int framesAddr[6];
 };
 
-void insertElement(std::list<std::unique_ptr<ImagesFound>> &found, std::array<unsigned short, 6> &ids, int *occupied, unsigned short id, unsigned int inodeAddress, unsigned int imapAddress)
+void insertElement(std::list<std::unique_ptr<ImagesFound>> &found, unsigned short id, unsigned int inodeAddress, unsigned int imapAddress)
 {
     std::list<std::unique_ptr<ImagesFound>>::iterator it;
 
@@ -59,38 +59,33 @@ void insertElement(std::list<std::unique_ptr<ImagesFound>> &found, std::array<un
     image->inodesNum += 1;
 
     // data structure not yet full, simple insertion
-    if (*occupied < 5)
+    if (found.size() == 0)
     {
-        found.push_back(std::move(image));
-        ids[*occupied] = id;
-        *occupied = (*occupied) + 1;
+        iprintf("Not full\n");
+        found.push_front(std::move(image));
     }
-    // data structure full
     else
     {
-        // id in last position
-        ids[5] = id;
-        // sort the array of ids
-        std::sort(ids.begin(), ids.end());
-        // id in last position needs to be removed, not part of the first five
         for (it = found.begin(); it != found.end(); ++it)
         {
-            if ((*it).get()->id == ids[5])
+            if (it->get()->id > id)
             {
-                swap(*it, image);
+                found.insert(it, std::move(image));
+                break;
             }
         }
     }
+
+    if (found.size() > 5)
+    {
+        found.pop_back();
+    }
 }
 
-void searchImage(MemoryState *state)
+void searchImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *state)
 {
-    std::list<std::unique_ptr<ImagesFound>> foundL;
+    foundL.clear();
     std::list<std::unique_ptr<ImagesFound>>::iterator it;
-
-    std::array<unsigned short, 6> ids;
-    ids.fill(-1);
-    int occupied = 0;
 
     auto &flash = Flash::instance();
     auto buffer = make_unique<unsigned char[]>(256);
@@ -114,16 +109,16 @@ void searchImage(MemoryState *state)
             // id part of the first inode
             if (counter < 11)
             {
-                insertElement(foundL, ids, &occupied, id, imap->inode_addresses[0], imapAddress);
+                insertElement(foundL, id, imap->inode_addresses[0], imapAddress);
             }
             // id part of the second inode
             else
             {
-                insertElement(foundL, ids, &occupied, id, imap->inode_addresses[1], imapAddress);
+                insertElement(foundL, id, imap->inode_addresses[1], imapAddress);
             }
             counter++;
         }
-        //TODO: replace this with actual navigation through imaps
+        // TODO: replace this with actual navigation through imaps
         imapAddress -= 32768;
     }
 
