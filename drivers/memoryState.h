@@ -79,6 +79,11 @@ public:
         currentImageId++;
     }
 
+    shared_ptr<Sector> getSectorState()
+    {
+        return sector;
+    }
+
 private:
     unsigned int firstMemoryAddressFree = 0;
     unsigned int settingsAddress = 0;
