@@ -1,4 +1,3 @@
-#include "memoryState.h"
 #include <drivers/mlx90640.h>
 #include <cstring>
 #include <cassert>
@@ -8,14 +7,10 @@
 #include <util/crc16.h>
 #include <util/util.h>
 
-using namespace std;
+#include "memoryState.h"
+#include "struct.h"
 
-struct Image
-{
-    unsigned char type;
-    unsigned short id;
-    unsigned char position;
-};
+using namespace std;
 
 void saveImage(MemoryState* state, std::unique_ptr<MLX90640MemoryFrame> image, int imageSize){
     auto& flash=Flash::instance();

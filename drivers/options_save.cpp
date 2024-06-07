@@ -32,18 +32,12 @@
 #include <drivers/flash.h>
 #include <util/crc16.h>
 #include <util/util.h>
+
 #include "memoryState.h"
+#include "struct.h"
 
 using namespace std;
 using namespace miosix;
-
-struct Header
-{
-    unsigned char type;        //0x00 if settings, 0x01 if image, 0xff if not type
-    unsigned char written;     //0x00 if written,     0xff if not written
-    unsigned char invalidated; //0x00 if invalidated, 0xff if not invalidated
-    unsigned short crc;
-};
 
 void loadOptions(void *options, int optionsSize, unsigned int address)
 {

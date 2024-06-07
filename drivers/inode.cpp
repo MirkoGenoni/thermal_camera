@@ -1,27 +1,24 @@
-#include "inode.h"
 #include <drivers/flash.h>
 #include <memory>
 #include <cstring>
 
-using namespace std;
+#include "inode.h"
+#include "struct.h"
 
-struct Header
-{
-    unsigned char type;
-};
+using namespace std;
 
 void Inode::writeInodeToMemory(unsigned int address)
 {
     iprintf("Writing INODE on address 0x%x\n", address);
     unsigned short pagesSize = sizeof(InodeStruct);
-    unsigned short totalSize = pagesSize + sizeof(Header);
+    unsigned short totalSize = pagesSize + sizeof(ShortHeader);
 
     auto &flash = Flash::instance();
     auto buffer = make_unique<unsigned char[]>(totalSize);
     auto bufferInode = make_unique<unsigned char[]>(pagesSize);
 
     auto *inode = reinterpret_cast<InodeStruct *>(bufferInode.get());
-    auto *header = reinterpret_cast<Header *>(buffer.get());
+    auto *header = reinterpret_cast<ShortHeader *>(buffer.get());
 
     header->type = 2;
 
@@ -50,7 +47,7 @@ void Inode::writeInodeToMemory(unsigned int address)
         counter2++;
     }
 
-    memcpy(buffer.get() + sizeof(Header), inode, pagesSize);
+    memcpy(buffer.get() + sizeof(ShortHeader), inode, pagesSize);
 
     if (flash.write(address, buffer.get(), totalSize) == false)
     {

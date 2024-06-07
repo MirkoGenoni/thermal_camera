@@ -3,16 +3,11 @@
 #include <memory>
 #include <cstring>
 
-struct Header
-{
-    unsigned char type;
-};
-
 void Imap::writeImapToMemory(unsigned int *address, unsigned short *image_ids, unsigned int freeAddress, unsigned short *imap_modified)
 {
     auto &flash = Flash::instance();
     unsigned short pagesSize = sizeof(ImapStruct);
-    unsigned short totalSize = pagesSize + sizeof(Header);
+    unsigned short totalSize = pagesSize + sizeof(ShortHeader);
 
     // auto& flash=Flash::instance();
     auto buffer = make_unique<unsigned char[]>(totalSize);
@@ -37,7 +32,7 @@ void Imap::writeImapToMemory(unsigned int *address, unsigned short *image_ids, u
         imap->modified_imaps[i] = imap_modified[i];
     }
 
-    memcpy(buffer.get() + sizeof(Header), imap, pagesSize);
+    memcpy(buffer.get() + sizeof(ShortHeader), imap, pagesSize);
 
     if (flash.write(freeAddress, buffer.get(), totalSize) == false)
     {

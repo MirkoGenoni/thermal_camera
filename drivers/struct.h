@@ -25,13 +25,6 @@ struct Image
     unsigned char position;
 };
 
-struct ApplicationOptions
-{
-    int frameRate; // NOTE: to get beyond 8fps the I2C bus needs to be overclocked too!
-    float emissivity;
-    int brightness;
-};
-
 struct ImapModifiedCache
 {
     unsigned short id;

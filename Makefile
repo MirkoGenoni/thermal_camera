@@ -25,6 +25,8 @@ drivers/flash.cpp drivers/options_save.cpp         \
 drivers/usb_tinyusb.cpp    \
 drivers/memoryState.cpp drivers/image_save.cpp     \
 drivers/inode.ccp drivers/imap.cpp drivers/image_visualizer.cpp\
+drivers/debugLogger.cpp drivers/imap_navigation.cpp \
+
 
 IMG :=  \
 images/batt0icon.png \
