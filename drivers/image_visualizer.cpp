@@ -7,52 +7,35 @@
 #include <set>
 #include <algorithm>
 
+#include <drivers/flash.h>
+
 #include "inode.h"
 #include "imap.h"
-#include <drivers/flash.h>
-#include "memoryState.h"
+#include "image_visualizer.h"
+#include "imap_navigation.h"
+#include "debugLogger.h"
 
-struct InodeRead
-{
-    unsigned char type;
-};
-
-struct Image
-{
-    unsigned char type;
-    unsigned short id;
-    unsigned char position;
-};
-
-struct ImagesFound
-{
-    unsigned short id;
-
-    unsigned int imap;
-
-    unsigned int inode[2];
-    int inodesNum = 0;
-
-    unsigned int framesAddr[6];
-};
+using namespace std;
 
 void searchFrameAddresses(std::list<std::unique_ptr<ImagesFound>> &foundL)
 {
+    unique_ptr<DebugLogger> debug = make_unique<DebugLogger>();
     std::list<std::unique_ptr<ImagesFound>>::iterator it;
     // Cycle through inode addresses and remove duplicates in order to reduce memory reading
     std::set<unsigned int> unique_inode_addresses;
 
     for (it = foundL.begin(); it != foundL.end(); it++)
     {
-        if (it->get()->inode[0] != 0)
-            unique_inode_addresses.insert((*it).get()->inode[0] << 8);
-        if (it->get()->inode[1] != 0)
-            unique_inode_addresses.insert((*it).get()->inode[1] << 8);
+        for (auto inodeAddress : (*it).get()->inodeSet)
+        {
+            if (inodeAddress != 0xffff)
+                unique_inode_addresses.insert(inodeAddress << 8);
+        }
     }
 
     auto &flash = Flash::instance();
     auto buffer = make_unique<unsigned char[]>(256);
-    auto inode = reinterpret_cast<InodeStruct *>(buffer.get() + sizeof(InodeStruct));
+    auto inode = reinterpret_cast<InodeStruct *>(buffer.get() + sizeof(ShortHeader));
 
     auto bufferImage = make_unique<unsigned char[]>(256);
     auto image = reinterpret_cast<Image *>(bufferImage.get());
@@ -84,28 +67,24 @@ void searchFrameAddresses(std::list<std::unique_ptr<ImagesFound>> &foundL)
             }
         }
     }
-
-    for (it = foundL.begin(); it != foundL.end(); ++it)
-    {
-        std::cout << "Image: " << dec << (*it).get()->id << std::endl;
-        for (int i = 0; i < 6; i++)
-        {
-            std::cout << "Address " << i << ": 0x" << hex << (*it).get()->framesAddr[i] << std::endl;
-        }
-    }
+    debug.get()->printVisualizerState(foundL);
 }
 
 void insertElement(std::list<std::unique_ptr<ImagesFound>> &found, unsigned short id, unsigned int inodeAddress, unsigned int imapAddress)
 {
     std::list<std::unique_ptr<ImagesFound>>::iterator it;
 
+    if (id == 0)
+        return;
+
     // ID FOUND
     //  image already inserted in first five images data structure, update only the data structure
     for (it = found.begin(); it != found.end(); ++it)
     {
         if ((*it).get()->id == id)
-        {
-            (*it).get()->inode[(*it).get()->inodesNum] = inodeAddress;
+        {            
+            (*it).get()->inodeSet.insert(inodeAddress);
+            (*it).get()->imapSet.insert(imapAddress);
             return;
         }
     }
@@ -114,8 +93,8 @@ void insertElement(std::list<std::unique_ptr<ImagesFound>> &found, unsigned shor
     // creation of field of object to add to the data structure
     auto image = make_unique<ImagesFound>();
     image->id = id;
-    image->inode[image->inodesNum] = inodeAddress;
-    image->inodesNum += 1;
+    image->inodeSet.insert(inodeAddress);
+    image->imapSet.insert(imapAddress);
 
     // data structure not yet full, simple insertion
     if (found.size() == 0)
@@ -125,14 +104,18 @@ void insertElement(std::list<std::unique_ptr<ImagesFound>> &found, unsigned shor
     }
     else
     {
+        bool inserted = false;
         for (it = found.begin(); it != found.end(); ++it)
         {
             if (it->get()->id > id)
             {
                 found.insert(it, std::move(image));
+                inserted = true;
                 break;
             }
         }
+        if (!inserted)
+            found.push_back(std::move(image));
     }
 
     if (found.size() > 5)
@@ -141,17 +124,74 @@ void insertElement(std::list<std::unique_ptr<ImagesFound>> &found, unsigned shor
     }
 }
 
-void searchImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *state)
+void ImageVisualizer::searchImage(std::list<std::unique_ptr<ImagesFound>> &foundL)
 {
     foundL.clear();
-    std::list<std::unique_ptr<ImagesFound>>::iterator it;
 
-    auto &flash = Flash::instance();
+    unsigned int imapAddress = memoryState->getFreeAddress() & 0xffff8000;
+    unique_ptr<ImapNavigation> imapNavigator = make_unique<ImapNavigation>(imapAddress);
+
+    list<ImapModifiedCache *>::iterator it;
+    list<ImapModifiedCache *> imap_modified = memoryState->getImapsModified();
+
+    Flash& flash = Flash::instance();
     auto buffer = make_unique<unsigned char[]>(256);
-    auto imap = reinterpret_cast<ImapStruct *>(buffer.get() + sizeof(InodeRead));
+    auto imap = reinterpret_cast<ImapStruct *>(buffer.get() + sizeof(ShortHeader));
+    auto inode = reinterpret_cast<InodeStruct *>(buffer.get() + sizeof(ShortHeader));
 
+    if (imap_modified.size() > 0)
+        iprintf("IMAP modified not written in any imap\n");
+
+    // ## IMAP MODIFIED NOT WRITTEN ##
+    int counter = 0;
+    for (it = imap_modified.begin(); it != imap_modified.end(); ++it)
+    {
+        counter = 0;
+        iprintf("Id: %d ", (*it)->id);
+        iprintf("Address: 0x%x\n", ((*it)->address));
+        if (imapNavigator->setLooked((*it)->id))
+        {
+            if (flash.read((*it)->address, buffer.get(), 256) == false)
+            {
+                iprintf("Error Reading 0x%x\n", ((*it)->address << 8));
+            }
+            for (auto id : imap->image_ids)
+            {
+                if (counter < 12)
+                {
+                    insertElement(foundL, id, imap->inode_addresses[0], (*it)->address);
+                }
+                else
+                {
+                    insertElement(foundL, id, imap->inode_addresses[1], (*it)->address);
+                }
+                counter++;
+            }
+        };
+    }
+
+    // ## IMAGE FROM CURRENT SECTOR NOT WRITTEN ##
+    for (auto data : memoryState->getSector().get()->pages)
+    {
+        if (data.type == 1)
+        {
+            insertElement(foundL, data.id, 0xffff, 0xffff);
+        }
+    }
+
+    // ## IMAGES FROM PREVIOUS INODE ##
+    counter = 0;
+    if (isCurrentInode == true)
+    {
+        for (auto ids : memoryState->getImagesOld())
+        {
+            insertElement(foundL, ids, currentInodeAddress >> 8, 0xffff);
+        }
+    }
+
+    // ## NAVIGATION THROUGH ALL IMAPS ##
     // Address of the last imap
-    unsigned int imapAddress = state->getFreeAddress() & 0xffff8000;
+    imapAddress = imapNavigator->nextAddress();
 
     // Search for inodes of first five elements
     while (imapAddress > 0)
@@ -161,23 +201,20 @@ void searchImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *s
             iprintf("Error Reading 0x%x", imapAddress);
         }
 
-        int counter = 0;
+        counter = 0;
         for (auto id : imap->image_ids)
         {
-            // id part of the first inode
-            if (counter < 11)
+            if (counter < 12)
             {
                 insertElement(foundL, id, imap->inode_addresses[0], imapAddress);
             }
-            // id part of the second inode
             else
             {
                 insertElement(foundL, id, imap->inode_addresses[1], imapAddress);
             }
             counter++;
         }
-        // TODO: replace this with actual navigation through imaps
-        imapAddress -= 32768;
+        imapAddress = imapNavigator->nextAddress();
     }
 
     searchFrameAddresses(foundL);
@@ -185,20 +222,24 @@ void searchImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *s
 
 void insertNext(std::list<std::unique_ptr<ImagesFound>> &found, unsigned short id, unsigned int inodeAddress, unsigned int imapAddress)
 {
+    if (id == 0)
+        return;
+
     std::list<std::unique_ptr<ImagesFound>>::iterator it;
     for (it = found.begin(); it != found.end(); ++it)
     {
-        if ((*it).get()->id == id && (*it).get()->inode[0] != inodeAddress)
+        if ((*it).get()->id == id)
         {
-            (*it).get()->inode[(*it).get()->inodesNum] = inodeAddress;
+            (*it).get()->inodeSet.insert(inodeAddress);
+            (*it).get()->imapSet.insert(imapAddress);
             return;
         }
     }
 
     auto image = make_unique<ImagesFound>();
     image->id = id;
-    image->inode[image->inodesNum] = inodeAddress;
-    image->inodesNum += 1;
+    image->inodeSet.insert(inodeAddress);
+    image->imapSet.insert(imapAddress);
 
     auto last = std::prev(found.end(), 1);
     if (found.size() == 5 && id > last->get()->id)
@@ -217,40 +258,87 @@ void insertNext(std::list<std::unique_ptr<ImagesFound>> &found, unsigned short i
     }
 }
 
-void nextImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *state)
+void ImageVisualizer::nextImage(std::list<std::unique_ptr<ImagesFound>> &foundL)
 {
-    std::list<std::unique_ptr<ImagesFound>>::iterator it;
+    unique_ptr<DebugLogger> debug = make_unique<DebugLogger>();
+    puts("\n\nNEXT IMAGES\n");
+    Flash& flash = Flash::instance();
+    auto buffer = make_unique<unsigned char[]>(256);
+    auto imap = reinterpret_cast<ImapStruct *>(buffer.get() + sizeof(ShortHeader));
+    auto inode = reinterpret_cast<InodeStruct *>(buffer.get() + sizeof(ShortHeader));
 
-    for (auto data : state->getSectorState()->pages)
+    unsigned int imapAddress = memoryState->getFreeAddress() & 0xffff8000;
+    unique_ptr<ImapNavigation> imapNavigator = make_unique<ImapNavigation>(imapAddress);
+
+    list<ImapModifiedCache *>::iterator it;
+    list<ImapModifiedCache *> imap_modified = memoryState->getImapsModified();
+
+    // ## IMAP MODIFIED NOT WRITTEN ##
+    int counter = 0;
+    for (it = imap_modified.begin(); it != imap_modified.end(); ++it)
     {
+        counter = 0;
+        if (imapNavigator->setLooked((*it)->id))
+        {
+            if (flash.read((*it)->address, buffer.get(), 256) == false)
+            {
+                iprintf("Error Reading 0x%x\n", ((*it)->address << 8));
+            }
+            for (auto id : imap->image_ids)
+            {
+                if (counter < 12)
+                {
+                    insertNext(foundL, id, imap->inode_addresses[0], (*it)->address);
+                }
+                else
+                {
+                    insertNext(foundL, id, imap->inode_addresses[1], (*it)->address);
+                }
+                counter++;
+            }
+        };
+    }
+
+    // ## IMAGE FROM CURRENT SECTOR NOT WRITTEN ##
+    for (auto data : memoryState->getSector().get()->pages)
+    {
+        // IMAGE IN MEMORY NOT COVERED BY INODE OR IMAP
         if (data.type == 1)
         {
-            insertNext(foundL, data.id, 0, 0);
+            insertNext(foundL, data.id, 0xffff, 0xffff);
         }
     }
 
-    auto &flash = Flash::instance();
-    auto buffer = make_unique<unsigned char[]>(256);
-    auto imap = reinterpret_cast<ImapStruct *>(buffer.get() + sizeof(InodeRead));
-    std::cout << "Need to search in another imap\n";
+    counter = 0;
 
+    // ## IMAGES FROM PREVIOUS INODE ##
+    // CHECK IF IMAGE OR IMAP IN MEMORY COVERED BY PREVIOUS INODE
+    if (isCurrentInode == true)
+    {
+        // IF IMAGE FOUND, ADDS IMAGE WITH THE ADDRESS OF INODE AND IMAP ADDRESS 0xffff
+        for (auto ids : memoryState->getImagesOld())
+        {
+            insertNext(foundL, ids, memoryState->getOldInodeAddress() >> 8, 0xffff);
+        }
+    }
+
+    // ## NAVIGATION THROUGH ALL IMAPS ##
     // Address of the last imap
-    unsigned int imapAddress = state->getFreeAddress() & 0xffff8000;
+    imapAddress = imapNavigator->nextAddress();
 
     // Search for inodes of first five elements
     while (imapAddress > 0)
     {
         if (flash.read(imapAddress, buffer.get(), 256) == false)
         {
-            std::cout << "Error Reading 0x" << hex << imapAddress << std::endl;
+            iprintf("Error Reading 0x%x\n", imapAddress);
         }
 
-        int counter = 0;
+        counter = 0;
         for (auto id : imap->image_ids)
         {
-            if (counter < 11)
+            if (counter < 12)
             {
-
                 insertNext(foundL, id, imap->inode_addresses[0], imapAddress);
             }
             else
@@ -259,7 +347,7 @@ void nextImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *sta
             }
             counter++;
         }
-        imapAddress -= 32768;
+        imapAddress = imapNavigator->nextAddress();
     }
 
     if (foundL.size() == 6)
@@ -269,35 +357,33 @@ void nextImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *sta
     }
     else
     {
-        iprintf("\nNO NEED TO UPDATE\n");
-        for (it = foundL.begin(); it != foundL.end(); ++it)
-        {
-            iprintf("Image: %d", (*it).get()->id);
-            for (int i = 0; i < 6; i++)
-            {
-                iprintf("Address %d: 0x%x", i, (*it).get()->framesAddr[i]);
-            }
-        }
+        puts("NO NEED TO UPDATE");
+        debug.get()->printVisualizerState(foundL);
     }
 }
 
-void insertPrev(std::list<std::unique_ptr<ImagesFound>> &found, unsigned short id, unsigned int inodeAddress, unsigned short imapAddress)
+void insertPrev(std::list<std::unique_ptr<ImagesFound>> &found, unsigned short id, unsigned int inodeAddress, unsigned int imapAddress)
 {
+    if (id == 0)
+        return;
+
     std::list<std::unique_ptr<ImagesFound>>::iterator it;
 
     for (it = found.begin(); it != found.end(); ++it)
     {
-        if ((*it).get()->id == id && (*it).get()->inode[(*it).get()->inodesNum] != inodeAddress)
+        if ((*it).get()->id == id)
         {
-            (*it).get()->inode[(*it).get()->inodesNum] = inodeAddress;
+            (*it).get()->inodeSet.insert(inodeAddress);
+            (*it).get()->imapSet.insert(imapAddress);
+
             return;
         }
     }
 
     auto image = make_unique<ImagesFound>();
     image->id = id;
-    image->inode[image->inodesNum] = inodeAddress;
-    image->inodesNum += 1;
+    image->inodeSet.insert(inodeAddress);
+    image->imapSet.insert(imapAddress);
 
     if (found.size() == 5 && id < found.begin()->get()->id)
     {
@@ -306,6 +392,7 @@ void insertPrev(std::list<std::unique_ptr<ImagesFound>> &found, unsigned short i
     else
     {
         auto secondElement = std::next(found.begin(), 1);
+        auto thirdElement = std::next(found.begin(), 2);
         if (id < secondElement->get()->id && id > found.begin()->get()->id)
         {
             found.insert(secondElement, std::move(image));
@@ -314,38 +401,87 @@ void insertPrev(std::list<std::unique_ptr<ImagesFound>> &found, unsigned short i
     }
 }
 
-void prevImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *state)
+void ImageVisualizer::prevImage(std::list<std::unique_ptr<ImagesFound>> &foundL)
 {
-    std::list<std::unique_ptr<ImagesFound>>::iterator it;
+    unique_ptr<DebugLogger> debug = make_unique<DebugLogger>();
+    puts("\n\nPREV IMAGES\n");
+    Flash& flash = Flash::instance();
+    auto buffer = make_unique<unsigned char[]>(256);
+    auto imap = reinterpret_cast<ImapStruct *>(buffer.get() + sizeof(ShortHeader));
+    auto inode = reinterpret_cast<InodeStruct *>(buffer.get() + sizeof(ShortHeader));
 
-    for (auto data : state->getSectorState()->pages)
+    unsigned int imapAddress = memoryState->getFreeAddress() & 0xffff8000;
+    unique_ptr<ImapNavigation> imapNavigator = make_unique<ImapNavigation>(imapAddress);
+
+    list<ImapModifiedCache *>::iterator it;
+    list<ImapModifiedCache *> imap_modified = memoryState->getImapsModified();
+
+    // ## IMAP MODIFIED NOT WRITTEN ##
+    int counter = 0;
+    for (it = imap_modified.begin(); it != imap_modified.end(); ++it)
     {
+        counter = 0;
+        puts("\nNEW IMAP NOT WRITTEN");
+        iprintf("Id: %d ", (*it)->id);
+        iprintf("Address: 0x%x\n", ((*it)->address));
+        if (imapNavigator->setLooked((*it)->id))
+        {
+            if (flash.read((*it)->address, buffer.get(), 256) == false)
+            {
+                iprintf("Error Reading 0x%x\n", ((*it)->address << 8));
+            }
+            for (auto id : imap->image_ids)
+            {
+                if (counter < 12)
+                {
+                    insertPrev(foundL, id, imap->inode_addresses[0], (*it)->address);
+                }
+                else
+                {
+                    insertPrev(foundL, id, imap->inode_addresses[1], (*it)->address);
+                }
+                counter++;
+            }
+        };
+    }
+
+    // ## IMAGE FROM CURRENT SECTOR NOT WRITTEN ##
+    for (auto data : memoryState->getSector().get()->pages)
+    {
+        // IMAGE IN MEMORY NOT COVERED BY INODE OR IMAP
         if (data.type == 1)
         {
-            insertPrev(foundL, data.id, 0, 0);
+            insertPrev(foundL, data.id, 0xffff, 0xffff);
         }
     }
 
-    auto &flash = Flash::instance();
-    auto buffer = make_unique<unsigned char[]>(256);
-    auto imap = reinterpret_cast<ImapStruct *>(buffer.get() + sizeof(InodeRead));
-    std::cout << "Need to search in another imap\n";
+    // ## IMAGES FROM PREVIOUS INODE ##
+    // CHECK IF IMAGE OR IMAP IN MEMORY COVERED BY PREVIOUS INODE
+    if (isCurrentInode == true)
+    {
+        // IF IMAGE FOUND, ADDS IMAGE WITH THE ADDRESS OF INODE AND IMAP ADDRESS 0xffff
+        for (auto ids : memoryState->getImagesOld())
+        {
+            insertPrev(foundL, ids, memoryState->getOldInodeAddress() >> 8, 0xffff);
+        }
+    }
 
+    // ## NAVIGATION THROUGH ALL IMAPS ##
     // Address of the last imap
-    unsigned int imapAddress = state->getFreeAddress() & 0xffff8000;
+    imapAddress = imapNavigator->nextAddress();
 
     // Search for inodes of first five elements
     while (imapAddress > 0)
     {
         if (flash.read(imapAddress, buffer.get(), 256) == false)
         {
-            std::cout << "Error Reading 0x" << hex << imapAddress << std::endl;
+            iprintf("Error Reading 0x%x\n", imapAddress);
         }
 
-        int counter = 0;
+        counter = 0;
         for (auto id : imap->image_ids)
         {
-            if (counter < 11)
+            if (counter < 12)
             {
 
                 insertPrev(foundL, id, imap->inode_addresses[0], imapAddress);
@@ -356,7 +492,7 @@ void prevImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *sta
             }
             counter++;
         }
-        imapAddress -= 32768;
+        imapAddress = imapNavigator->nextAddress();
     }
 
     if (foundL.size() == 6)
@@ -366,14 +502,153 @@ void prevImage(std::list<std::unique_ptr<ImagesFound>> &foundL, MemoryState *sta
     }
     else
     {
-        iprintf("\nNO NEED TO UPDATE\n");
+        puts("\nNO NEED TO UPDATE");
+        debug.get()->printVisualizerState(foundL);
+    }
+}
+
+void updateCurrentView(std::list<std::unique_ptr<ImagesFound>> &foundL, std::list<unique_ptr<InodeModified>> &inode_modified, std::list<unique_ptr<ImapModified>> &imap_modified, unsigned short id)
+{
+
+    std::list<std::unique_ptr<ImagesFound>>::iterator it;
+    std::list<std::unique_ptr<InodeModified>>::iterator it2;
+    std::list<std::unique_ptr<ImapModified>>::iterator it3;
+
+    std::set<unsigned int>::iterator it4;
+
+    for (it2 = inode_modified.begin(); it2 != inode_modified.end(); it2++)
+    {
+        puts("\n\nMODIFIED: ");
+        iprintf("INODEADDRESS: %x\n", it2->get()->inodeAddress);
+        iprintf("OLDINODEADDRESS: %x\n", it2->get()->oldInodeAddress);
+
         for (it = foundL.begin(); it != foundL.end(); ++it)
         {
-            iprintf("Image: %d", (*it).get()->id);
-            for (int i = 0; i < 6; i++)
+            auto inodeSet = it->get()->inodeSet;
+            if (inodeSet.find(it2->get()->oldInodeAddress >> 8) != inodeSet.end())
             {
-                iprintf("Address %d: 0x%x", i, (*it).get()->framesAddr[i]);
+                it->get()->inodeSet.extract(it2->get()->oldInodeAddress >> 8);
+                it->get()->inodeSet.insert(it2->get()->inodeAddress >> 8);
             }
         }
     }
+
+    for (it3 = imap_modified.begin(); it3 != imap_modified.end(); it3++)
+    {
+        for (it = foundL.begin(); it != foundL.end(); ++it)
+        {
+            auto imapSet = it->get()->imapSet;
+            if (imapSet.find(it3->get()->oldImapAddress) != imapSet.end())
+            {
+                it->get()->imapSet.extract(it3->get()->oldImapAddress);
+                it->get()->imapSet.insert(it3->get()->imapAddress);
+            }
+        }
+    }
+
+    for (it = foundL.begin(); it != foundL.end(); ++it)
+    {
+        if (it->get()->id == id)
+        {
+            foundL.erase(it);
+            break;
+        }
+    }
+
+    auto image = make_unique<ImagesFound>();
+    image->id = 0;
+    foundL.push_front(std::move(image));
+}
+
+void addNewImapToCurrentView(std::list<std::unique_ptr<ImagesFound>> &foundL, unsigned int newImapAddress)
+{
+    iprintf("IMAP WRITTEN ON: 0x%x\n", newImapAddress);
+    std::list<std::unique_ptr<ImagesFound>>::iterator it;
+    for (it = foundL.begin(); it != foundL.end(); it++)
+    {
+        auto remove = it->get()->imapSet.find(0xffff);
+        if (remove != it->get()->imapSet.end())
+        {
+            puts("FOUND EMPTY IMAP TO BE FILLED");
+            it->get()->imapSet.extract(0xffff);
+            it->get()->imapSet.insert(newImapAddress);
+        }
+    }
+}
+
+bool ImageVisualizer::deleteImage(std::list<std::unique_ptr<ImagesFound>> &foundL, unsigned short id)
+{
+    std::list<std::unique_ptr<ImagesFound>>::iterator it;
+    unique_ptr<DebugLogger> debug = make_unique<DebugLogger>();
+
+    std::list<unique_ptr<InodeModified>> inode_modified;
+    std::list<unique_ptr<ImapModified>> imap_modified;
+
+    bool sectorModified = false;
+    bool additionalUpdate = false;
+    unsigned int newImapAddress = 0;
+
+    for (it = foundL.begin(); it != foundL.end(); it++)
+    {
+        auto element = it->get();
+        if (element->id == id)
+        {
+            for (auto inode : element->inodeSet)
+            {
+                if (inode == 0xffff)
+                {
+                    memoryState->updateCurrentSector(id);
+                    memoryState->writeMockInode();
+                    sectorModified = true;
+                }
+                else
+                {
+                    unsigned int newInodeAddress = memoryState->rewriteInode(inode << 8, id);
+                    if ((newInodeAddress + 512) % 16384 == 0)
+                    {
+                        additionalUpdate = true;
+                        newImapAddress = newInodeAddress + 512;
+                    }
+                    unique_ptr<InodeModified> modified = make_unique<InodeModified>();
+                    modified->inodeAddress = newInodeAddress;
+                    modified->oldInodeAddress = inode << 8;
+                    inode_modified.push_front(std::move(modified));
+                }
+            }
+        }
+    }
+
+    for (it = foundL.begin(); it != foundL.end(); it++)
+    {
+        auto element = it->get();
+        if (element->id == id)
+        {
+            for (auto imap : element->imapSet)
+            {
+                if (imap != 0xffff)
+                {
+                    unsigned int newImapAddress = memoryState->rewriteImap(imap, id, inode_modified);
+                    unique_ptr<ImapModified> modified = make_unique<ImapModified>();
+                    modified->imapAddress = newImapAddress;
+                    modified->oldImapAddress = imap;
+                    imap_modified.push_front(std::move(modified));
+                }
+                else
+                {
+                    memoryState->updateOldInodeAddress(inode_modified, id);
+                }
+            }
+        }
+    }
+
+    if (additionalUpdate == true)
+    {
+        iprintf("IMAP WRITTEN ON: 0x%x\n", newImapAddress);
+        addNewImapToCurrentView(foundL, newImapAddress);
+    }
+
+    updateCurrentView(foundL, inode_modified, imap_modified, id);
+    debug.get()->printDeletionLog(inode_modified, imap_modified,sectorModified, memoryState->getSector()->pages);
+    nextImage(foundL);
+    return true;
 }

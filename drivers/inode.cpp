@@ -25,28 +25,45 @@ void Inode::writeInodeToMemory(unsigned int address)
 
     header->type = 2;
 
+    int counter = 0;
     inode->id = (address - 256) / (256 * 64);
 
-    int counter = 0;
-    int counter2=0;
     for (auto data : mapped->pages)
     {
         inode->content[counter] = data.type;
         inode->content[counter + 1] = data.address >> 8 & 0xff;
         inode->content[counter + 2] = data.address & 0xff;
-
-        //if data inserted is image and the id is not already saved
-        if (data.type==1 && (counter2 == 0 || data.id != inode->image_ids[counter2 - 1]))
-        {
-            //save image id in the correct field of the inode
-            inode->image_ids[counter2] = data.id;
-            counter2++;
-        }
-
+        iprintf("WRITING INODE 0x%x\n", ((inode->content[counter + 1] << 8 | inode->content[counter + 2])));
         counter += 3;
+    }
+    
+    int counter2=0;
+    set<unsigned short> imageIds;
+    for (auto data : mapped->pages)
+    {
+        if (data.type == 1)
+            imageIds.insert(data.id);
+    }
+    for (auto data : imageIds)
+    {
+        inode->image_ids[counter2] = data;
+        counter2++;
     }
 
     memcpy(buffer.get() + sizeof(Header), inode, pagesSize);
+
+    if (flash.write(address, buffer.get(), totalSize) == false)
+    {
+        iprintf("Failed to write address 0x%x\n", address);
+        return;
+    }
+}
+
+void Inode::rewriteInodeToMemory(unsigned int address, std::unique_ptr<unsigned char[]> buffer)
+{
+    Flash& flash = Flash::instance();
+    unsigned short pagesSize = sizeof(InodeStruct);
+    unsigned short totalSize = pagesSize + sizeof(ShortHeader);
 
     if (flash.write(address, buffer.get(), totalSize) == false)
     {

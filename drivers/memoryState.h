@@ -1,29 +1,13 @@
-#pragma once
-#include <drivers/mlx90640.h>
 #include <memory>
+#include <list>
+#include <set>
+
+#include "struct.h"
 
 using namespace std;
 
-struct Page
-{
-    unsigned short address;
-    unsigned char type;
-    unsigned short id;
-    unsigned char position;
-    bool used;
-};
-
-struct Sector
-{
-    Page pages[63];
-};
-
-struct Test
-{
-    unsigned short id;
-    unsigned short ids[10];
-    unsigned char pages[189];
-};
+#ifndef MEMORYSTATE
+#define MEMORYSTATE
 
 class MemoryState
 {
@@ -44,6 +28,37 @@ public:
     {
         return occupiedMemory;
     };
+
+    shared_ptr<Sector> getSector()
+    {
+        return sector;
+    };
+
+    bool getInodeFound()
+    {
+        return inodeFound;
+    };
+
+    unsigned int getOldInodeAddress()
+    {
+        return oldInodeAddress;
+    };
+
+    set<unsigned short> getImagesOld()
+    {
+        return imageIds_0;
+    }
+
+    list<ImapModifiedCache *> getImapsModified()
+    {
+        list<unique_ptr<ImapModifiedCache>>::iterator it;
+        list<ImapModifiedCache *> test;
+        for (it = imap_modified.begin(); it != imap_modified.end(); ++it)
+        {
+            test.push_back(it->get());
+        }
+        return test;
+    }
 
     void setFirstMemoryAddressFree(unsigned int address)
     {
@@ -79,17 +94,29 @@ public:
         currentImageId++;
     }
 
-    shared_ptr<Sector> getSectorState()
-    {
-        return sector;
-    }
+    unsigned int rewriteInode(unsigned int address, unsigned short imageId);
+    unsigned int rewriteImap(unsigned int address, unsigned short imageId, std::list<std::unique_ptr<InodeModified>> &foundL);
+    void updateOldInodeAddress(std::list<std::unique_ptr<InodeModified>> &foundL, unsigned short id);
+    void updateCurrentSector(unsigned short id);
+    void writeMockInode();
 
 private:
     unsigned int firstMemoryAddressFree = 0;
     unsigned int settingsAddress = 0;
     unsigned int totalMemory = 16;    // number of 256 bytes pages free
     unsigned int occupiedMemory = 64; // number of pages occupied
-
     unsigned short currentImageId = -1;
+
+    bool inodeFound = false;
+    unsigned int oldInodeAddress = 0;
+    unsigned short oldInodeId = 0;
+
     shared_ptr<Sector> sector = make_shared<Sector>();
+    set<unsigned short> imageIds_0;
+    set<unsigned short> imageIds_1;
+
+    std::list<unique_ptr<ImapModifiedCache>> imap_modified;
+
+    unsigned short initialRemaining = 63;
 };
+#endif

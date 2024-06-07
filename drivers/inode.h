@@ -15,6 +15,7 @@ class Inode {
         };
 
         void writeInodeToMemory(unsigned int address);
+        void rewriteInodeToMemory(unsigned int address, std::unique_ptr<unsigned char[]> buffer);
     private:
         unsigned int clearable=0;
         shared_ptr<Sector> mapped;
