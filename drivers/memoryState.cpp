@@ -421,8 +421,7 @@ unsigned int MemoryState::rewriteInode(unsigned int address, unsigned short imag
     if (occupiedMemory == 62)
     {
         if (imageIds_0.find(imageId) != imageIds_0.end())
-            //TODO: substitute extract function
-            // imageIds_0.extract(imageIds_0.find(imageId));
+            imageIds_0.erase(imageIds_0.find(imageId));
         if (address == this->oldInodeAddress)
         {
             this->oldInodeAddress = firstMemoryAddressFree;
@@ -491,8 +490,7 @@ void MemoryState::updateOldInodeAddress(std::list<std::unique_ptr<InodeModified>
 {
     if (imageIds_0.find(id) == imageIds_0.end())
         return;
-    //TODO: substitute extract function
-    // imageIds_0.extract(imageIds_0.find(id));
+    imageIds_0.erase(imageIds_0.find(id));
 
     std::list<std::unique_ptr<InodeModified>>::iterator it;
     for (it = foundL.begin(); it != foundL.end(); it++)

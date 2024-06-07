@@ -527,9 +527,8 @@ void updateCurrentView(std::list<std::unique_ptr<ImagesFound>> &foundL, std::lis
             auto inodeSet = it->get()->inodeSet;
             if (inodeSet.find(it2->get()->oldInodeAddress >> 8) != inodeSet.end())
             {
-                //TODO: substitute extract function
-                // it->get()->inodeSet.extract(it2->get()->oldInodeAddress >> 8);
-                // it->get()->inodeSet.insert(it2->get()->inodeAddress >> 8);
+                it->get()->inodeSet.erase(it->get()->inodeSet.find(it2->get()->oldInodeAddress >> 8));
+                it->get()->inodeSet.insert(it2->get()->inodeAddress >> 8);
             }
         }
     }
@@ -541,9 +540,8 @@ void updateCurrentView(std::list<std::unique_ptr<ImagesFound>> &foundL, std::lis
             auto imapSet = it->get()->imapSet;
             if (imapSet.find(it3->get()->oldImapAddress) != imapSet.end())
             {
-                //TODO: substitute extract function
-                // it->get()->imapSet.extract(it3->get()->oldImapAddress);
-                // it->get()->imapSet.insert(it3->get()->imapAddress);
+                it->get()->imapSet.erase(it->get()->imapSet.find(it3->get()->oldImapAddress));
+                it->get()->imapSet.insert(it3->get()->imapAddress);
             }
         }
     }
@@ -572,8 +570,7 @@ void addNewImapToCurrentView(std::list<std::unique_ptr<ImagesFound>> &foundL, un
         if (remove != it->get()->imapSet.end())
         {
             puts("FOUND EMPTY IMAP TO BE FILLED");
-            //TODO: substitute extract function
-            // it->get()->imapSet.extract(0xffff);
+            it->get()->imapSet.erase(it->get()->imapSet.find(0xffff));
             it->get()->imapSet.insert(newImapAddress);
         }
     }
