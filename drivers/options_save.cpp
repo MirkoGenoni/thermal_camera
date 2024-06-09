@@ -39,7 +39,7 @@
 using namespace std;
 using namespace miosix;
 
-void loadOptions(void *options, int optionsSize, unsigned int address)
+bool loadOptions(void *options, int optionsSize, unsigned int address)
 {
     puts("loadOptions");
     auto& flash=Flash::instance();
@@ -47,14 +47,26 @@ void loadOptions(void *options, int optionsSize, unsigned int address)
     unsigned int size=optionsSize+sizeof(Header);
     assert(size<flash.pageSize());
     auto buffer=make_unique<unsigned char[]>(size);
+    auto *header=reinterpret_cast<Header*>(buffer.get());
 
     if(flash.read(address,buffer.get(),size)==false)
     {
         iprintf("Failed to read address 0x%x\n",address);
         //Read error, abort
     }
-    memcpy(options,buffer.get()+sizeof(Header),optionsSize);
-    iprintf("Loaded options from address 0x%x\n",address);
+    if(header->crc!=crc16(buffer.get()+sizeof(Header),optionsSize))
+    {
+        iprintf("Corrupted option @ address 0x%x\n",address);
+        puts("Loading old settings, rewriting correct");
+        unsigned int oldOptions=optionsSize+sizeof(OldOptionsHeader);
+        memcpy(options,buffer.get()+sizeof(OldOptionsHeader),optionsSize);
+        return false;
+    } else {
+        memcpy(options,buffer.get()+sizeof(Header),optionsSize);
+        iprintf("Loaded options from address 0x%x\n",address);
+        return true;
+    }
+
 }
 
 void saveOptions(MemoryState* state, void *options, int optionsSize)

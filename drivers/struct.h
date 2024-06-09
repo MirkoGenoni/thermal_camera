@@ -67,5 +67,11 @@ struct ImagesFound
     unsigned int framesAddr[6];
 };
 
+struct OldOptionsHeader
+{
+    unsigned char written;
+    unsigned char invalidated;
+    unsigned short crc;
+};
 
 #endif

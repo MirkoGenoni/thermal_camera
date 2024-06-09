@@ -36,7 +36,7 @@
  * \param options pointer to options data structure
  * \param data options data structure size, must be less than 256 bytes
  */
-void loadOptions(void *options, int optionsSize, unsigned int address);
+bool loadOptions(void *options, int optionsSize, unsigned int address);
 
 /**
  * Try to save options to FLASH. May fail in case of hardware errors.

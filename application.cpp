@@ -64,7 +64,9 @@ Application::Application(Display& display)
     memoryState = new MemoryState();
     memoryState->scanMemory(sizeof(ui.options));
     unsigned int settingsAddress = memoryState->getSettingAddress();
-    loadOptions(&ui.options,sizeof(ui.options), settingsAddress);
+    if(!loadOptions(&ui.options,sizeof(ui.options), settingsAddress)){
+        saveOptions(ui.options);
+    };
     if(sensor->setRefresh(refreshFromInt(ui.options.frameRate))==false)
         puts("Error setting framerate");
     display.setBrightness(ui.options.brightness * 6);
