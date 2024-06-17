@@ -30,6 +30,7 @@ bool MemoryState::increaseOccupiedMemory(unsigned int dimension)
 }
 
 void MemoryState::increaseMemoryAddressFree(unsigned int address, unsigned char type, unsigned short id, unsigned char position, unsigned int increment){
+    unique_ptr<DebugLogger> debug = make_unique<DebugLogger>();
     firstMemoryAddressFree+=increment;
     
     sector->pages[occupiedMemory].address=address>>8;
@@ -69,6 +70,7 @@ void MemoryState::increaseMemoryAddressFree(unsigned int address, unsigned char 
         }
 
         currentInode->writeInodeToMemory(firstMemoryAddressFree);
+        debug->printMemoryAddress(firstMemoryAddressFree);
         sector.reset(new Sector());
         setOccupiedMemory(0);
 
@@ -171,7 +173,7 @@ void MemoryState::scanMemory(int optionsSize){
     /*
         ## SCAN THROUGH ALL THE LAST ADDRESSES OF SECTOR TO FIND FREE PAGE OR INODE ##
     */
-    for(unsigned int i=63*flash.pageSize();i<flash.size(); i+=16*flash.sectorSize()){
+    for(unsigned int i=63*flash.pageSize();i<flash.size(); i+=4*flash.sectorSize()){
         if(flash.read(i,buffer.get(), flash.pageSize())==false)
         {
             iprintf("Failed to read address 0x%x\n",i);
@@ -365,7 +367,8 @@ void MemoryState::scanMemory(int optionsSize){
         }
     }
 
-    if ((short)currentImageId == -1)
+    //TODO: add handling of no images in current imap, search for last id in previous imaps 
+    if (currentImageId == (unsigned short)-1)
         currentImageId = 1;
 
     unique_ptr<DebugLogger> debug = make_unique<DebugLogger>();
@@ -531,4 +534,5 @@ void MemoryState::clearMemory(){
     flash.eraseBlock(2*flash.blockSize());
     this->setFirstMemoryAddressFree(0);
     this->setOccupiedMemory(0);
+    currentImageId=1;
 }

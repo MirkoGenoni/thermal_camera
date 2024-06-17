@@ -37,7 +37,7 @@ void DebugLogger::printMemoryAddress(unsigned int address)
         iprintf("inode id %d\n", (unsigned short)inode->id);
         for (int counter = 0; counter < 189; counter += 3)
         {
-            iprintf("type: %d\n", (unsigned short)inode->content[counter]);
+            iprintf("type: %d   ", (unsigned short)inode->content[counter]);
             iprintf("address: %x\n", (((unsigned short)inode->content[counter + 1] << 8 | (unsigned short)inode->content[counter + 2]) << 8));
         }
 
@@ -98,6 +98,7 @@ void DebugLogger::printSectorPages(Page *pages)
     for (int i = 0; i < 63; i++)
     {
         Page data = pages[i];
+        if(i!=0 && data.address == 0) break;
         iprintf("address: 0x%x  ", (data.address << 8));
         iprintf("type: %d  ", (unsigned short)data.type);
         iprintf("id: %d  ", (unsigned short)data.id);

@@ -30,7 +30,6 @@ void Inode::writeInodeToMemory(unsigned int address)
         inode->content[counter] = data.type;
         inode->content[counter + 1] = data.address >> 8 & 0xff;
         inode->content[counter + 2] = data.address & 0xff;
-        iprintf("WRITING INODE 0x%x\n", ((inode->content[counter + 1] << 8 | inode->content[counter + 2])));
         counter += 3;
     }
     
