@@ -17,12 +17,13 @@
 
 using namespace std;
 
-void searchFrameAddresses(std::list<std::unique_ptr<ImagesFound>> &foundL)
+void ImageVisualizer::searchFrameAddresses(std::list<std::unique_ptr<ImagesFound>> &foundL)
 {
     unique_ptr<DebugLogger> debug = make_unique<DebugLogger>();
     std::list<std::unique_ptr<ImagesFound>>::iterator it;
     // Cycle through inode addresses and remove duplicates in order to reduce memory reading
     std::set<unsigned int> unique_inode_addresses;
+    std::set<unsigned int> localIds;
 
     for (it = foundL.begin(); it != foundL.end(); it++)
     {
@@ -30,6 +31,8 @@ void searchFrameAddresses(std::list<std::unique_ptr<ImagesFound>> &foundL)
         {
             if (inodeAddress != 0xffff)
                 unique_inode_addresses.insert(inodeAddress << 8);
+            else
+                localIds.insert(it->get()->id);
         }
     }
 
@@ -67,6 +70,19 @@ void searchFrameAddresses(std::list<std::unique_ptr<ImagesFound>> &foundL)
             }
         }
     }
+
+    for(auto page: memoryState->getSector().get()->pages){
+        if(page.type==1 && localIds.find(page.id)!=localIds.end()){
+            for (it = foundL.begin(); it != foundL.end(); ++it)
+                {
+                    if ((*it).get()->id == page.id)
+                    {
+                        (*it).get()->framesAddr[page.position] = page.address <<8;
+                    }
+                }
+        } 
+    }
+
     debug.get()->printVisualizerState(foundL);
 }
 

@@ -32,4 +32,5 @@ private:
     unsigned int currentInodeAddress = 0;
     MemoryState *memoryState;
     set<unsigned short> currentInode;
+    void searchFrameAddresses(std::list<std::unique_ptr<ImagesFound>> &foundL);
 };
