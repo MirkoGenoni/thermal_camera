@@ -28,6 +28,7 @@
 #pragma once
 
 #include <chrono>
+#include <memory>
 #include "drivers/mlx90640frame.h"
 #include "drivers/stm32f2_f4_i2c.h"
 #include "drivers/MLX90640_API.h"
@@ -119,6 +120,8 @@ public:
      * \param memoryFrame is a pointer to an object allocated by the caller in which the new frame will be stored
     */
     void reduceFrame(const MLX90640Frame *frame, MLX90640MemoryFrame *memoryFrame);
+
+    void decompressFrame(MLX90640Frame* frame, MLX90640Frame *memoryFrame);
 
     const MLX90640EEPROM& getEEPROM();
     

@@ -30,6 +30,7 @@
 #include <thread>
 #include <stdexcept>
 #include <chrono>
+#include <memory>
 #include <interfaces/endianness.h>
 
 using namespace std;
@@ -90,6 +91,10 @@ void MLX90640::processFrame(const MLX90640RawFrame *rawFrame, MLX90640Frame *fra
 void MLX90640::reduceFrame(const MLX90640Frame *frame, MLX90640MemoryFrame *memoryFrame)
 {
     memoryFrame->process(frame, memoryFrame);
+}
+
+void MLX90640::decompressFrame(MLX90640Frame* frame, MLX90640Frame *memoryFrame){
+    frame->decompress(frame, memoryFrame);
 }
 
 bool MLX90640::readSpecificSubFrame(int index, unsigned short rawFrame[834])

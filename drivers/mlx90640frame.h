@@ -28,6 +28,7 @@
 #pragma once
 
 #include "MLX90640_API.h"
+#include <memory>
 
 /**
  * Processed MLX90640 frame with temperature data. Temperature is stored
@@ -51,6 +52,37 @@ public:
      * point, compensating for the sensor orientation on the board
      */
     short getTempAt(int x, int y) { return temperature[(nx-1-x)+y*nx]; }
+
+    void decompress(MLX90640Frame* frame, MLX90640Frame *memoryFrame){
+        int p = 0;
+        int h = 0;
+        uint16_t current_mask = 0x0001;
+
+        for (int a = 0; a < 720; a++)
+        {
+            if (a == 0 || p == 14)
+            {
+                frame->temperature[h] = (unsigned short)(memoryFrame->temperature[a] >> 1);
+                h++;
+                current_mask = 0x0000;
+                p = 0;
+            }
+            else
+            {
+                current_mask = current_mask | (1 << p);
+                frame->temperature[h] = (((unsigned short)memoryFrame->temperature[a-1] & current_mask) << (14 - p)) | ((unsigned short)memoryFrame->temperature[a] >> p + 2);
+                h++;
+
+                if (p == 13)
+                {
+                    frame->temperature[h] = (unsigned short)(memoryFrame->temperature[a] & 0x7fff);
+                    h++;
+                }
+                p++;
+            }
+        }
+        puts("Decompression completed");
+    }
 };
 
 /**
