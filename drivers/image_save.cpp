@@ -20,7 +20,8 @@ void saveImage(MemoryState* state, std::unique_ptr<MLX90640MemoryFrame> image, i
     
     unsigned int size = sizeof(Image) + byteForImage;
     assert(size<=flash.pageSize()); // ensures that overhead + image can be contained in a page
-    iprintf("Image dimension: %d", size);
+    iprintf("Saving image id: %d\n", state->getCurrentImageId());
+    iprintf("Image dimension: %d\n", size);
 
     // if(state->increaseOccupiedMemory(6)==false){ //check for enough free memory
     //     iprintf("not enough memory\n");
