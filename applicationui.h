@@ -81,6 +81,13 @@ public:
     void saveOptions(ApplicationOptions& options);
 };
 
+enum TopType
+{
+    Data,
+    SaveConfirm,
+    GalleryId
+};
+
 /**
  * The thermal camera application logic lives here, except all code which
  * interacts with the hardware
@@ -102,7 +109,7 @@ public:
 
     void updateFrame(MLX90640Frame *processedFrame);
 
-    void drawLoaded(MLX90640Frame *processedFrame);
+    void drawLoaded(MLX90640Frame *processedFrame, unsigned short id);
 
     enum Lifecycle
     {
@@ -118,6 +125,9 @@ public:
     bool load = false;
     bool loadReady = false;
     bool saving = false;
+    unsigned short skip=0;
+    bool next = false;
+    bool forward = false;
 
 private:
     ApplicationUI(const ApplicationUI&)=delete;
@@ -147,7 +157,7 @@ private:
 
     void drawMenuEntry(mxgui::DrawingContext& dc, int id);
 
-    void drawStaticTopBar(mxgui::DrawingContext& dc, bool save);
+    void drawStaticTopBar(mxgui::DrawingContext& dc, TopType save, unsigned short id=0);
 
     void updateMenu(mxgui::DrawingContext& dc);
 
@@ -320,7 +330,7 @@ void ApplicationUI<IOHandler>::drawStaticPartOfMainScreen(mxgui::DrawingContext&
     dc.setFont(smallFont);
     dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
     dc.write(mxgui::Point(11,0),line);*/
-    drawStaticTopBar(dc, false);
+    drawStaticTopBar(dc, TopType::Data);
     const mxgui::Color darkGrey=to565(128,128,128), lightGrey=to565(192,192,192);
     dc.line(mxgui::Point(0,12),mxgui::Point(0,107),darkGrey);
     dc.line(mxgui::Point(1,12),mxgui::Point(127,12),darkGrey);
@@ -332,13 +342,13 @@ void ApplicationUI<IOHandler>::drawStaticPartOfMainScreen(mxgui::DrawingContext&
 }
 
 template<class IOHandler>
-void ApplicationUI<IOHandler>::drawStaticTopBar(mxgui::DrawingContext& dc, bool save)
+void ApplicationUI<IOHandler>::drawStaticTopBar(mxgui::DrawingContext& dc, TopType save, unsigned short idNum)
 {
     const mxgui::Point p0(0,0);
     const mxgui::Point p1(127,12);
     dc.clear(p0, p1, mxgui::black);
     char line[16];
-    if(save)
+    if(save == TopType::SaveConfirm)
     {
         char yes[4];
         char no [3];
@@ -351,12 +361,22 @@ void ApplicationUI<IOHandler>::drawStaticTopBar(mxgui::DrawingContext& dc, bool 
         dc.write(mxgui::Point(1,0), yes);
         dc.write(mxgui::Point(52,0),line);
         dc.write(mxgui::Point(116,0), no);
-    } else {
+    } else if(save == TopType::Data){
         snprintf(line,sizeof(line),"%.2f  %2dfps ",options.emissivity,options.frameRate);
         dc.drawImage(mxgui::Point(0,0),emissivityicon);
         dc.setFont(smallFont);
         dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
         dc.write(mxgui::Point(11,0),line);
+    } else if(save== TopType::GalleryId){
+        char write[4];
+        char id[6];
+        sniprintf(write, sizeof(write), "id: ");
+        sniprintf(id, sizeof(id), std::to_string(idNum).c_str());
+
+        dc.setFont(smallFont);
+        dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+        dc.write(mxgui::Point(80,0), write);
+        dc.write(mxgui::Point(100,0), id);
     }
 }
 
@@ -409,7 +429,7 @@ void ApplicationUI<IOHandler>::enterCamera(mxgui::DrawingContext& dc)
 {
     state=Camera;
     dc.clear(mxgui::black);
-    drawStaticTopBar(dc, false);
+    drawStaticTopBar(dc, TopType::Data);
     drawFrame(dc);
     onBtn.ignoreUntilNextPress();
     upBtn.ignoreUntilNextPress();
@@ -425,13 +445,13 @@ void ApplicationUI<IOHandler>::updateCamera(mxgui::DrawingContext& dc)
         puts("BACK TO MENU");
     } else if(upBtn.getUpEvent()){
             if(!saving){
-                drawStaticTopBar(dc, true); //showing inside top bar the save confirmation
+                drawStaticTopBar(dc, TopType::SaveConfirm); //showing inside top bar the save confirmation
                 saving=true;
                 paused=true;
                 ioHandler.setPause(paused); //no new image will be processed
                 puts("Saving confirmation");
             }else { //save confirmed
-                drawStaticTopBar(dc, false); //remove save confirmation from top
+                drawStaticTopBar(dc, TopType::Data); //remove save confirmation from top
                 writeOut=true;
                 saving=false;
                 ioHandler.setWriteOut(); //wake up write buffer
@@ -442,7 +462,7 @@ void ApplicationUI<IOHandler>::updateCamera(mxgui::DrawingContext& dc)
     } 
     if(onBtn.getUpEvent()){
         if(saving){ //save refused, frame processing restart
-            drawStaticTopBar(dc, false);
+            drawStaticTopBar(dc, TopType::Data);
             writeOut=false;
             paused=false;
             ioHandler.setPause(paused);
@@ -453,13 +473,15 @@ void ApplicationUI<IOHandler>::updateCamera(mxgui::DrawingContext& dc)
 }
 
 template<class IOHandler>
-void ApplicationUI<IOHandler>::drawLoaded(MLX90640Frame *processedFrame)
+void ApplicationUI<IOHandler>::drawLoaded(MLX90640Frame *processedFrame, unsigned short id)
 {    
     {
         std::lock_guard<std::mutex> lock(lastFrameMutex);
         lastFrame = std::shared_ptr<MLX90640Frame>(processedFrame);
     }
     mxgui::DrawingContext dc(display);
+    drawStaticTopBar(dc, TopType::GalleryId, id);
+
     drawFrame(dc);
 }
 
@@ -468,12 +490,13 @@ void ApplicationUI<IOHandler>::enterGallery(mxgui::DrawingContext& dc)
 {
     state=Gallery;
     dc.clear(mxgui::black);
-    drawStaticTopBar(dc, false);
     onBtn.ignoreUntilNextPress();
     upBtn.ignoreUntilNextPress();
     paused=true;
     ioHandler.setPause(paused);
     ioHandler.retrieveImages(found);
+    next=false;
+    skip=0;
 }
 
 template<class IOHandler>
@@ -481,14 +504,20 @@ void ApplicationUI<IOHandler>::updateGallery(mxgui::DrawingContext& dc)
 {
     if(upBtn.getLongPressEvent()){
         enterMenu(dc);
-        ioHandler.setPause(false);
+        paused=false;
+        ioHandler.setPause(paused);
         puts("BACK TO MENU");
     } else if(upBtn.getUpEvent()){
-        ioHandler.prevImage(found);
+        if(skip > 3) skip--;
+        else if(skip < 3 && skip > 0 ) skip--;
+        else next=true;
+        ioHandler.prevImage(found, next, skip);
         puts("PREV IMAGE");
     }
     if(onBtn.getAutorepeatEvent()){
-        ioHandler.nextImage(found);
+        if(skip < 3) skip++;
+        else if(skip==3) next = true;
+        ioHandler.nextImage(found, next, skip);
         puts("NEXT IMAGE");
     }
 }

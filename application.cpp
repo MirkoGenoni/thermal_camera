@@ -181,29 +181,61 @@ void Application::retrieveImages(std::list<std::unique_ptr<ImagesFound>>& found)
     loadedFrameQueue.get(frame);
 
     puts("Calling draw function");
-    ui.drawLoaded(frame);
+    ui.drawLoaded(frame, found.begin()->get()->id);
 }
 
 
-void Application::nextImage(std::list<std::unique_ptr<ImagesFound>>& found){
-    // unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
-    // visualizer->nextImage(found);    
+void Application::nextImage(std::list<std::unique_ptr<ImagesFound>>& found, bool next, unsigned short skip){
+    unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
+    unsigned short lastId = found.back()->id;
+    if(next==true){
+        visualizer->nextImage(found);
+        if(lastId == found.back()->id){
+            ui.next=false;
+            skip++; 
+            ui.skip++;
+        }
+    }
     
-    // unsigned int* addr = found.begin()->get()->framesAddr;
-    // imageToLoad.put(addr);
-    // ui.load = true;
-    // loadThread->wakeup();
+    list<std::unique_ptr<ImagesFound>>::iterator it = found.begin();
+    std::advance(it, skip);
+
+    unsigned int* addr = it->get()->framesAddr;
+    imageToLoad.put(addr);
+    ui.load = true;
+    loadThread->wakeup();
+
+    MLX90640Frame* frame;
+    loadedFrameQueue.get(frame);
+
+    ui.drawLoaded(frame, it->get()->id);
 }
 
 
-void Application::prevImage(std::list<std::unique_ptr<ImagesFound>>& found){
-    // unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
-    // visualizer->prevImage(found);
+void Application::prevImage(std::list<std::unique_ptr<ImagesFound>>& found, bool next, unsigned short skip){
+    unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
+    unsigned short firstId = found.begin()->get()->id;
+    if(next==true){
+        visualizer->prevImage(found);        
+        if(firstId == found.begin()->get()->id){
+            ui.next=false;
+            skip--;
+            ui.skip--;
+        }
+    }
+    
+    list<std::unique_ptr<ImagesFound>>::iterator it = found.begin();
+    std::advance(it, skip);
 
-    // unsigned int* addr = found.begin()->get()->framesAddr;
-    // imageToLoad.put(addr);
-    // ui.load = true;
-    // loadThread->wakeup();
+    unsigned int* addr = it->get()->framesAddr;      
+    imageToLoad.put(addr);
+    ui.load = true;
+    loadThread->wakeup();
+    
+    MLX90640Frame* frame;
+    loadedFrameQueue.get(frame);
+
+    ui.drawLoaded(frame, it->get()->id);
 }
 
 void Application::saveOptions(ApplicationOptions& options)
@@ -266,6 +298,8 @@ void Application::loadImageThreadMain(){
 
         ::loadImage(memoryFrame, addresses);
         sensor->decompressFrame(frame, memoryFrame);
+        //TODO: handle with smart pointer
+        delete(memoryFrame);
         loadedFrameQueue.put(frame);
         imageToLoad.reset();
         ui.load = false;
@@ -325,7 +359,6 @@ void Application::processThreadMain()
         rawFrameQueue.get(rawFrame);
         if(rawFrame==nullptr) continue; //Happens on shutdown
         //auto t1=getTime();
-        if(ui.load==true){ continue;}
         auto *processedFrame=new MLX90640Frame;
         sensor->processFrame(rawFrame,processedFrame,ui.options.emissivity);
         processedFrameQueue.put(processedFrame);
