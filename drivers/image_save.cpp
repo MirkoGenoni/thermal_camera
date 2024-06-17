@@ -76,3 +76,27 @@ void saveImage(MemoryState* state, std::unique_ptr<MLX90640MemoryFrame> image, i
     
     iprintf("saving\n");
 }
+
+void loadImage(MLX90640Frame* frame, unsigned int* address){
+    Flash& flash = Flash::instance();
+    auto buffer= make_unique<unsigned char[]>(256);
+    auto reinterpret = reinterpret_cast<unsigned short*>(buffer.get()+sizeof(Image));
+    
+    for(int i=0; i<5; i++){
+        if(flash.read(address[i], buffer.get(), 256)==false){
+            iprintf("Failed to write address 0x%x\n",address[i]);
+            return;
+        };
+        for(int o=0; o<124; o++){
+            frame->temperature[i*124+o] = reinterpret[o];
+        }
+    }
+    if(flash.read(address[5], buffer.get(), 256)==false){
+        iprintf("Failed to write address 0x%x\n",address[5]);
+        return;
+    };
+    for(int o=0; o<100; o++){
+        frame->temperature[620+o] = reinterpret[o];
+    }
+    puts("Image fully loaded");
+}

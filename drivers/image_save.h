@@ -4,3 +4,5 @@
 #include <memory>
 
 void saveImage(MemoryState *state, std::unique_ptr<MLX90640MemoryFrame> memoryFrame, int imageSize);
+
+void loadImage(MLX90640Frame* frame, unsigned int* address);
