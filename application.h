@@ -61,6 +61,12 @@ public:
 
     void saveOptions(ApplicationOptions& options);
 
+    void retrieveImages(std::list<std::unique_ptr<ImagesFound>>& found);
+
+    void nextImage(std::list<std::unique_ptr<ImagesFound>>& found);
+
+    void prevImage(std::list<std::unique_ptr<ImagesFound>>& found);
+
     void clearMemory();
     
     MemoryState *memoryState;
@@ -83,6 +89,9 @@ private:
     static void *writeMemoryMainTramp(void *p);
     inline void writeMemoryThreadMain();
 
+    static void *loadimageMainTramp(void *p);
+    inline void loadImageThreadMain();
+
     static void *usbThreadMainTramp(void *p);
     inline void usbThreadMain();
 
@@ -91,6 +100,7 @@ private:
 
     miosix::Thread *sensorThread;
     miosix::Thread *writeThread;
+    miosix::Thread *loadThread;
     mxgui::Display& display;
     UI ui;
     int prevBatteryVoltage=42; //4.2V
@@ -102,5 +112,7 @@ private:
     volatile bool usbDumpRawFrames=false;
     miosix::Queue<MLX90640RawFrame*, 1> usbOutputQueue;
     miosix::Queue<MLX90640MemoryFrame*, 1> frameWriteBuffer;
+    miosix::Queue<unsigned int*, 1> imageToLoad;
+    miosix::Queue<MLX90640Frame*, 1> loadedFrameQueue;
     const unsigned long long usbWriteTimeout = 50ULL * 1000000ULL; // 50ms
 };

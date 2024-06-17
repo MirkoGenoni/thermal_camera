@@ -30,6 +30,7 @@
 #include <drivers/misc.h>
 #include <drivers/options_save.h>
 #include <drivers/memoryState.h>
+#include <drivers/image_visualizer.h>
 #include <drivers/image_save.h>
 #include <images/batt100icon.h>
 #include <images/batt75icon.h>
@@ -80,6 +81,8 @@ void Application::run()
     Thread *processThread = Thread::create(Application::processThreadMainTramp, 2048U, Priority(MAIN_PRIORITY-1), static_cast<void*>(this), Thread::JOINABLE);
     writeThread = Thread::create(Application::writeMemoryMainTramp, 3072U, Priority(MAIN_PRIORITY-1), static_cast<void*>(this), Thread::JOINABLE);
 
+    loadThread = Thread::create(Application::loadimageMainTramp, 3072U, Priority(MAIN_PRIORITY-1), static_cast<void*>(this), Thread::JOINABLE);
+
     //Drop first frame before starting the render thread
     MLX90640Frame *processedFrame=nullptr;
     processedFrameQueue.get(processedFrame);
@@ -115,11 +118,19 @@ void Application::run()
     iprintf("usbOutputThread joined\n");
     usbInteractiveThread->join();
     iprintf("usbInteractiveThread joined\n");
+
     if(frameWriteBuffer.isFull()) frameWriteBuffer.reset();
     if(frameWriteBuffer.isEmpty()) frameWriteBuffer.put(nullptr);
     ui.writeOut=true;
     writeThread->wakeup();
     writeThread->join();
+
+    if(imageToLoad.isFull()) imageToLoad.reset();
+    if(imageToLoad.isEmpty()) imageToLoad.put(nullptr);
+    ui.load=true;
+    loadThread->wakeup();
+    loadThread->join();
+
     iprintf("writing thread joined\n");
 }
 
@@ -155,6 +166,46 @@ void Application::clearMemory()
     memoryState->clearMemory();
     ::saveOptions(memoryState, &ui.options, sizeof(ui.options));
 }
+
+void Application::retrieveImages(std::list<std::unique_ptr<ImagesFound>>& found){
+    unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
+    visualizer->searchImage(found);
+
+    unsigned int* addr = found.begin()->get()->framesAddr;      
+    imageToLoad.put(addr);
+    ui.load = true;
+    loadThread->wakeup();
+    puts("Thread waken up");
+    
+    MLX90640Frame* frame;
+    loadedFrameQueue.get(frame);
+
+    puts("Calling draw function");
+    ui.drawLoaded(frame);
+}
+
+
+void Application::nextImage(std::list<std::unique_ptr<ImagesFound>>& found){
+    // unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
+    // visualizer->nextImage(found);    
+    
+    // unsigned int* addr = found.begin()->get()->framesAddr;
+    // imageToLoad.put(addr);
+    // ui.load = true;
+    // loadThread->wakeup();
+}
+
+
+void Application::prevImage(std::list<std::unique_ptr<ImagesFound>>& found){
+    // unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
+    // visualizer->prevImage(found);
+
+    // unsigned int* addr = found.begin()->get()->framesAddr;
+    // imageToLoad.put(addr);
+    // ui.load = true;
+    // loadThread->wakeup();
+}
+
 void Application::saveOptions(ApplicationOptions& options)
 {
     ::saveOptions(memoryState, &options,sizeof(options));
@@ -196,6 +247,30 @@ void Application::writeMemoryThreadMain()
         ui.writeOut=false;
     }
 }
+
+void *Application::loadimageMainTramp(void *p){
+    static_cast<Application *>(p)->loadImageThreadMain();
+    return nullptr;
+};
+
+void Application::loadImageThreadMain(){
+    while(ui.lifecycle != UI::Quit)
+    {
+        while(ui.load==false) Thread::wait();
+
+        MLX90640Frame* memoryFrame = new MLX90640Frame;
+        MLX90640Frame* frame = new MLX90640Frame;
+
+        unsigned int* addresses;
+        imageToLoad.get(addresses);
+
+        ::loadImage(memoryFrame, addresses);
+        sensor->decompressFrame(frame, memoryFrame);
+        loadedFrameQueue.put(frame);
+        imageToLoad.reset();
+        ui.load = false;
+    }
+};
 
 void *Application::sensorThreadMainTramp(void *p)
 {
@@ -250,6 +325,7 @@ void Application::processThreadMain()
         rawFrameQueue.get(rawFrame);
         if(rawFrame==nullptr) continue; //Happens on shutdown
         //auto t1=getTime();
+        if(ui.load==true){ continue;}
         auto *processedFrame=new MLX90640Frame;
         sensor->processFrame(rawFrame,processedFrame,ui.options.emissivity);
         processedFrameQueue.put(processedFrame);

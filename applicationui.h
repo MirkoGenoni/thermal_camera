@@ -102,6 +102,8 @@ public:
 
     void updateFrame(MLX90640Frame *processedFrame);
 
+    void drawLoaded(MLX90640Frame *processedFrame);
+
     enum Lifecycle
     {
         Boot,
@@ -110,8 +112,11 @@ public:
     };
     ApplicationOptions options;
     Lifecycle lifecycle;
+    std::list<std::unique_ptr<ImagesFound>> found;
     bool paused = false;
     bool writeOut = false;
+    bool load = false;
+    bool loadReady = false;
     bool saving = false;
 
 private:
@@ -156,6 +161,10 @@ private:
 
     void updateCamera(mxgui::DrawingContext& dc);
 
+    void enterGallery(mxgui::DrawingContext& dc);
+
+    void updateGallery(mxgui::DrawingContext& dc);
+
     void enterShutdown(mxgui::DrawingContext& dc);
 
     void drawFrame(mxgui::DrawingContext& dc);
@@ -174,6 +183,7 @@ private:
     mxgui::Display& display;
     std::unique_ptr<ThermalImageRenderer> renderer;
     std::mutex lastFrameMutex;
+    std::mutex loadFrameMutex;
     std::shared_ptr<MLX90640Frame> lastFrame;
     IOHandler& ioHandler;
     ButtonEdgeDetector<true> upBtn;
@@ -184,6 +194,7 @@ private:
         Main,
         Menu,
         Camera,
+        Gallery,
         Option,
         Shutdown
     };
@@ -193,6 +204,7 @@ private:
         Back = 0,
         Options,
         CameraMenu,
+        GalleryMenu,
         ClearMemory,
         NumEntries
     };
@@ -222,6 +234,7 @@ void ApplicationUI<IOHandler>::update()
         case Main: updateMain(dc); break;
         case Menu: updateMenu(dc); break;
         case Camera: updateCamera(dc); break;
+        case Gallery: updateGallery(dc); break;
         case Option: updateOptions(dc); break;
         case Shutdown:
         default: break;
@@ -440,6 +453,47 @@ void ApplicationUI<IOHandler>::updateCamera(mxgui::DrawingContext& dc)
 }
 
 template<class IOHandler>
+void ApplicationUI<IOHandler>::drawLoaded(MLX90640Frame *processedFrame)
+{    
+    {
+        std::lock_guard<std::mutex> lock(lastFrameMutex);
+        lastFrame = std::shared_ptr<MLX90640Frame>(processedFrame);
+    }
+    mxgui::DrawingContext dc(display);
+    drawFrame(dc);
+}
+
+template<class IOHandler>
+void ApplicationUI<IOHandler>::enterGallery(mxgui::DrawingContext& dc)
+{
+    state=Gallery;
+    dc.clear(mxgui::black);
+    drawStaticTopBar(dc, false);
+    onBtn.ignoreUntilNextPress();
+    upBtn.ignoreUntilNextPress();
+    paused=true;
+    ioHandler.setPause(paused);
+    ioHandler.retrieveImages(found);
+}
+
+template<class IOHandler>
+void ApplicationUI<IOHandler>::updateGallery(mxgui::DrawingContext& dc)
+{
+    if(upBtn.getLongPressEvent()){
+        enterMenu(dc);
+        ioHandler.setPause(false);
+        puts("BACK TO MENU");
+    } else if(upBtn.getUpEvent()){
+        ioHandler.prevImage(found);
+        puts("PREV IMAGE");
+    }
+    if(onBtn.getAutorepeatEvent()){
+        ioHandler.nextImage(found);
+        puts("NEXT IMAGE");
+    }
+}
+
+template<class IOHandler>
 void ApplicationUI<IOHandler>::drawStaticPartOfMenuScreen(mxgui::DrawingContext& dc)
 {
     dc.clear(mxgui::black);
@@ -521,6 +575,9 @@ void ApplicationUI<IOHandler>::drawMenuEntry(mxgui::DrawingContext& dc, int id)
         case CameraMenu:
             _drawMenuOptionEntry(dc, CameraMenu, "Camera");
             break;
+        case GalleryMenu:
+            _drawMenuOptionEntry(dc, GalleryMenu, "Gallery");
+            break;
         case ClearMemory:
             _drawMenuOptionEntry(dc, ClearMemory, "ClearMemory");
             break;
@@ -564,6 +621,9 @@ void ApplicationUI<IOHandler>::updateMenu(mxgui::DrawingContext& dc)
                 break;
             case CameraMenu:
                 enterCamera(dc);
+                break; 
+            case GalleryMenu:
+                enterGallery(dc);
                 break;
             case ClearMemory:
                 ioHandler.clearMemory();
@@ -690,7 +750,7 @@ void ApplicationUI<IOHandler>::drawFrame(mxgui::DrawingContext& dc)
         iprintf("render = %lld draw = %lld\n",t2-t1,t3-t2);
         #endif
         //process = 78ms render = 1.9ms draw = 15ms 8Hz scaled short DMA UI
-    }
+        }
 }
 
 template<class IOHandler>
