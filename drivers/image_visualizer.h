@@ -8,14 +8,9 @@
 class ImageVisualizer
 {
 public:
-    ImageVisualizer(MemoryState *memoryState)
+    ImageVisualizer(MemoryState *memoryStateIN)
     {
-        this->memoryState = memoryState;
-        sector = memoryState->getSector();
-        firstMemoryAddressFree = memoryState->getFreeAddress();
-        isCurrentInode = memoryState->getInodeFound();
-        currentInodeAddress = memoryState->getOldInodeAddress();
-        currentInode = memoryState->getImagesOld();
+        memoryState = memoryStateIN;
     };
 
     void searchImage(std::list<std::unique_ptr<ImagesFound>> &foundL);
@@ -25,12 +20,6 @@ public:
     bool deleteImage(std::list<std::unique_ptr<ImagesFound>> &foundL, unsigned short id);
 
 private:
-    shared_ptr<Sector> sector;
-    unsigned int firstMemoryAddressFree;
-
-    bool isCurrentInode = false;
-    unsigned int currentInodeAddress = 0;
     MemoryState *memoryState;
-    set<unsigned short> currentInode;
     void searchFrameAddresses(std::list<std::unique_ptr<ImagesFound>> &foundL);
 };

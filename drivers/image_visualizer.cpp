@@ -189,7 +189,7 @@ void ImageVisualizer::searchImage(std::list<std::unique_ptr<ImagesFound>> &found
     // ## IMAGE FROM CURRENT SECTOR NOT WRITTEN ##
     for (auto data : memoryState->getSector().get()->pages)
     {
-        if (data.type == 1)
+        if (data.type == 1 && data.used == true)
         {
             insertElement(foundL, data.id, 0xffff, 0xffff);
         }
@@ -197,11 +197,11 @@ void ImageVisualizer::searchImage(std::list<std::unique_ptr<ImagesFound>> &found
 
     // ## IMAGES FROM PREVIOUS INODE ##
     counter = 0;
-    if (isCurrentInode == true)
+    if (memoryState->getInodeFound() == true)
     {
         for (auto ids : memoryState->getImagesOld())
         {
-            insertElement(foundL, ids, currentInodeAddress >> 8, 0xffff);
+            insertElement(foundL, ids, memoryState->getOldInodeAddress() >> 8, 0xffff);
         }
     }
 
@@ -319,7 +319,7 @@ void ImageVisualizer::nextImage(std::list<std::unique_ptr<ImagesFound>> &foundL)
     for (auto data : memoryState->getSector().get()->pages)
     {
         // IMAGE IN MEMORY NOT COVERED BY INODE OR IMAP
-        if (data.type == 1)
+        if (data.type == 1 && data.used == true)
         {
             insertNext(foundL, data.id, 0xffff, 0xffff);
         }
@@ -329,7 +329,7 @@ void ImageVisualizer::nextImage(std::list<std::unique_ptr<ImagesFound>> &foundL)
 
     // ## IMAGES FROM PREVIOUS INODE ##
     // CHECK IF IMAGE OR IMAP IN MEMORY COVERED BY PREVIOUS INODE
-    if (isCurrentInode == true)
+    if (memoryState->getInodeFound() == true)
     {
         // IF IMAGE FOUND, ADDS IMAGE WITH THE ADDRESS OF INODE AND IMAP ADDRESS 0xffff
         for (auto ids : memoryState->getImagesOld())
@@ -473,7 +473,7 @@ void ImageVisualizer::prevImage(std::list<std::unique_ptr<ImagesFound>> &foundL)
 
     // ## IMAGES FROM PREVIOUS INODE ##
     // CHECK IF IMAGE OR IMAP IN MEMORY COVERED BY PREVIOUS INODE
-    if (isCurrentInode == true)
+    if (memoryState->getInodeFound() == true)
     {
         // IF IMAGE FOUND, ADDS IMAGE WITH THE ADDRESS OF INODE AND IMAP ADDRESS 0xffff
         for (auto ids : memoryState->getImagesOld())
