@@ -85,7 +85,8 @@ enum TopType
 {
     Data,
     SaveConfirm,
-    GalleryId
+    GalleryId,
+    Camera
 };
 
 /**
@@ -382,6 +383,18 @@ void ApplicationUI<IOHandler>::drawStaticTopBar(mxgui::DrawingContext& dc, TopTy
         dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
         dc.write(mxgui::Point(80,0), write);
         dc.write(mxgui::Point(100,0), id);
+    } else if(save==TopType::Camera){        
+        snprintf(line,sizeof(line),"%.2f  %2dfps ",options.emissivity,options.frameRate);
+        dc.drawImage(mxgui::Point(0,0),emissivityicon);
+        dc.setFont(smallFont);
+        dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+        dc.write(mxgui::Point(11,0),line);
+        char remaining[16];
+        unsigned int currentId = ioHandler.memoryState->getCurrentImageId();
+        sniprintf(remaining, 16, "%u", currentId);
+        dc.setFont(smallFont);
+        dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+        dc.write(mxgui::Point(100,0), remaining);
     }
 }
 
@@ -434,7 +447,7 @@ void ApplicationUI<IOHandler>::enterCamera(mxgui::DrawingContext& dc)
 {
     state=Camera;
     dc.clear(mxgui::black);
-    drawStaticTopBar(dc, TopType::Data);
+    drawStaticTopBar(dc, TopType::Camera);
     drawFrame(dc);
     onBtn.ignoreUntilNextPress();
     upBtn.ignoreUntilNextPress();
@@ -456,7 +469,7 @@ void ApplicationUI<IOHandler>::updateCamera(mxgui::DrawingContext& dc)
                 ioHandler.setPause(paused); //no new image will be processed
                 puts("Saving confirmation");
             }else { //save confirmed
-                drawStaticTopBar(dc, TopType::Data); //remove save confirmation from top
+                drawStaticTopBar(dc, TopType::Camera); //remove save confirmation from top
                 writeOut=true;
                 saving=false;
                 ioHandler.setWriteOut(); //wake up write buffer
@@ -467,7 +480,7 @@ void ApplicationUI<IOHandler>::updateCamera(mxgui::DrawingContext& dc)
     } 
     if(onBtn.getUpEvent()){
         if(saving){ //save refused, frame processing restart
-            drawStaticTopBar(dc, TopType::Data);
+            drawStaticTopBar(dc, TopType::Camera);
             writeOut=false;
             paused=false;
             ioHandler.setPause(paused);
@@ -755,7 +768,7 @@ void ApplicationUI<IOHandler>::drawFrame(mxgui::DrawingContext& dc)
         auto t1 = miosix::getTime();
         #endif
         bool smallCached=(state == Menu || state == Option); //Cache now if the main thread changes it
-        bool camera=(state == Camera);
+        bool camera=(state == Camera || state == Gallery);
         if(smallCached==false) renderer->render(frame.get());
         else renderer->renderSmall(frame.get());
         #if 0 && defined(_MIOSIX)
@@ -784,13 +797,7 @@ void ApplicationUI<IOHandler>::drawFrame(mxgui::DrawingContext& dc)
             drawTemperature(dc,mxgui::Point(96,25),mxgui::Point(112,33),smallFont,
                             renderer->minTemperature());
         } else if(camera==true){
-            renderer->draw(dc,mxgui::Point(1,13));       
-            char remaining[16];
-            unsigned int currentId = ioHandler.memoryState->getCurrentImageId();
-            sniprintf(remaining, 16, "%u", currentId);
-            dc.setFont(smallFont);
-            dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
-            dc.write(mxgui::Point(100,0), remaining);
+            renderer->draw(dc,mxgui::Point(1,13));
         }
         #if 0 && defined(_MIOSIX)
         auto t3 = miosix::getTime();
