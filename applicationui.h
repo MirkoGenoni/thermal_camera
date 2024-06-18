@@ -782,9 +782,8 @@ void ApplicationUI<IOHandler>::drawFrame(mxgui::DrawingContext& dc)
         } else if(camera==true){
             renderer->draw(dc,mxgui::Point(1,13));       
             char remaining[16];
-            unsigned int occupied = ioHandler.memoryState->getOccupiedMemory()/6;
-            unsigned int total = ioHandler.memoryState->getTotalMemory() / 6;
-            sniprintf(remaining, 16, "%u/%u",occupied, total);
+            unsigned int currentId = ioHandler.memoryState->getCurrentImageId();
+            sniprintf(remaining, 16, "%u", currentId);
             dc.setFont(smallFont);
             dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
             dc.write(mxgui::Point(100,0), remaining);
