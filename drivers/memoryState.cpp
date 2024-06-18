@@ -337,7 +337,9 @@ void MemoryState::scanMemory(int optionsSize){
             imageIds_0.insert(inode->image_ids[i]);
         }
 
-        currentImageId = *imageIds_0.rbegin()+1;
+        if(currentImageId == (unsigned short)-1)
+            currentImageId = *imageIds_0.rbegin()+1;
+            
         // IMAP MODIFIED CONTAINED
         for (int i = 0; i < 189; i += 3)
         {
