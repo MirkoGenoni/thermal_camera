@@ -63,9 +63,9 @@ public:
 
     void retrieveImages(std::list<std::unique_ptr<ImagesFound>>& found);
 
-    void nextImage(std::list<std::unique_ptr<ImagesFound>>& found, bool load, unsigned short skip);
+    void nextImage(std::list<std::unique_ptr<ImagesFound>>& found);
 
-    void prevImage(std::list<std::unique_ptr<ImagesFound>>& found, bool load, unsigned short skip);
+    void prevImage(std::list<std::unique_ptr<ImagesFound>>& found);
 
     void clearMemory();
     

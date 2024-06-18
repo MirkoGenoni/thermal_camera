@@ -509,16 +509,17 @@ void ApplicationUI<IOHandler>::updateGallery(mxgui::DrawingContext& dc)
         ioHandler.setPause(paused);
         puts("BACK TO MENU");
     } else if(upBtn.getUpEvent()){
-        if(skip > 3) skip--;
-        else if(skip < 3 && skip > 0 ) skip--;
-        else next=true;
-        ioHandler.prevImage(found, next, skip);
+        if(skip != 3 && skip != 0) skip--;
+        else if(skip==3) next=true;
+        ioHandler.prevImage(found);
         puts("PREV IMAGE");
     }
     if(onBtn.getAutorepeatEvent()){
-        if(skip < 3) skip++;
-        else if(skip==3) next = true;
-        ioHandler.nextImage(found, next, skip);
+        if(skip < 3)
+            skip++;
+        else if(skip==3)
+            next = true;
+        ioHandler.nextImage(found);
         puts("NEXT IMAGE");
     }
 }

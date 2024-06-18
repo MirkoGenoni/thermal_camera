@@ -175,30 +175,32 @@ void Application::retrieveImages(std::list<std::unique_ptr<ImagesFound>>& found)
     imageToLoad.put(addr);
     ui.load = true;
     loadThread->wakeup();
-    puts("Thread waken up");
     
     MLX90640Frame* frame;
     loadedFrameQueue.get(frame);
 
-    puts("Calling draw function");
     ui.drawLoaded(frame, found.begin()->get()->id);
 }
 
 
-void Application::nextImage(std::list<std::unique_ptr<ImagesFound>>& found, bool next, unsigned short skip){
+void Application::nextImage(std::list<std::unique_ptr<ImagesFound>>& found){
     unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
     unsigned short lastId = found.back()->id;
-    if(next==true){
+    if(ui.next==true){
         visualizer->nextImage(found);
         if(lastId == found.back()->id){
             ui.next=false;
-            skip++; 
             ui.skip++;
         }
     }
     
     list<std::unique_ptr<ImagesFound>>::iterator it = found.begin();
-    std::advance(it, skip);
+    std::advance(it, ui.skip);
+
+    if(ui.skip > found.size()-1){
+        ui.skip = found.size()-1;
+        return;
+    }
 
     unsigned int* addr = it->get()->framesAddr;
     imageToLoad.put(addr);
@@ -212,20 +214,24 @@ void Application::nextImage(std::list<std::unique_ptr<ImagesFound>>& found, bool
 }
 
 
-void Application::prevImage(std::list<std::unique_ptr<ImagesFound>>& found, bool next, unsigned short skip){
+void Application::prevImage(std::list<std::unique_ptr<ImagesFound>>& found){
     unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
     unsigned short firstId = found.begin()->get()->id;
-    if(next==true){
+    if(ui.next==true){
         visualizer->prevImage(found);        
         if(firstId == found.begin()->get()->id){
             ui.next=false;
-            skip--;
             ui.skip--;
         }
     }
     
     list<std::unique_ptr<ImagesFound>>::iterator it = found.begin();
-    std::advance(it, skip);
+    std::advance(it, ui.skip);
+
+    if(ui.skip < 0){
+        ui.skip = 0;
+        return;
+    }
 
     unsigned int* addr = it->get()->framesAddr;      
     imageToLoad.put(addr);
