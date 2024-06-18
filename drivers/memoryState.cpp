@@ -534,6 +534,13 @@ void MemoryState::clearMemory(){
     flash.eraseBlock(flash.blockSize());
     flash.eraseBlock(2*flash.blockSize());
     this->setFirstMemoryAddressFree(0);
-    this->setOccupiedMemory(0);
+    this->setOccupiedMemory(0);    
+    for(int i=0; i<63; i++){
+        sector.get()->pages[i].address=0;
+        sector.get()->pages[i].id=0;
+        sector.get()->pages[i].position=0;
+        sector.get()->pages[i].type=0;
+        sector.get()->pages[i].used=false;
+    }
     currentImageId=1;
 }
