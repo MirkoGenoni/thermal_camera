@@ -257,7 +257,10 @@ template<class IOHandler>
 void ApplicationUI<IOHandler>::updateFrame(MLX90640Frame *processedFrame)
 {
     if (processedFrame==nullptr) return; //Happens on shutdown
-    if (paused) return;
+    if (paused){ 
+        delete processedFrame;
+        return; 
+    }
     {
         std::lock_guard<std::mutex> lock(lastFrameMutex);
         lastFrame = std::shared_ptr<MLX90640Frame>(processedFrame);
@@ -267,6 +270,7 @@ void ApplicationUI<IOHandler>::updateFrame(MLX90640Frame *processedFrame)
         mxgui::DrawingContext dc(display);
         drawFrame(dc);
     }
+    lastFrame.reset();
 }
 
 template<class IOHandler>
