@@ -171,6 +171,8 @@ void Application::retrieveImages(std::list<std::unique_ptr<ImagesFound>>& found)
     unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
     visualizer->searchImage(found);
 
+    if(found.size()==0) return;
+
     unsigned int* addr = found.begin()->get()->framesAddr;      
     imageToLoad.put(addr);
     ui.load = true;
@@ -184,6 +186,7 @@ void Application::retrieveImages(std::list<std::unique_ptr<ImagesFound>>& found)
 
 
 void Application::nextImage(std::list<std::unique_ptr<ImagesFound>>& found){
+    if(found.size()==0) return;
     unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
     unsigned short lastId = found.back()->id;
     if(ui.next==true){
@@ -215,6 +218,7 @@ void Application::nextImage(std::list<std::unique_ptr<ImagesFound>>& found){
 
 
 void Application::prevImage(std::list<std::unique_ptr<ImagesFound>>& found){
+    if(found.size()==0) return;
     unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
     unsigned short firstId = found.begin()->get()->id;
     if(ui.next==true){

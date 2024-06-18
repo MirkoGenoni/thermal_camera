@@ -174,6 +174,8 @@ private:
 
     void enterGallery(mxgui::DrawingContext& dc);
 
+    void drawNoImageText(mxgui::DrawingContext& dc);
+
     void updateGallery(mxgui::DrawingContext& dc);
 
     void enterShutdown(mxgui::DrawingContext& dc);
@@ -271,7 +273,6 @@ void ApplicationUI<IOHandler>::updateFrame(MLX90640Frame *processedFrame)
         mxgui::DrawingContext dc(display);
         drawFrame(dc);
     }
-    lastFrame.reset();
 }
 
 template<class IOHandler>
@@ -513,8 +514,19 @@ void ApplicationUI<IOHandler>::enterGallery(mxgui::DrawingContext& dc)
     paused=true;
     ioHandler.setPause(paused);
     ioHandler.retrieveImages(found);
+    if(found.size()==0) drawNoImageText(dc);
     next=false;
     skip=0;
+}
+
+template<class IOHandler>
+void ApplicationUI<IOHandler>::drawNoImageText(mxgui::DrawingContext& dc)
+{
+    char line[16];        
+    snprintf(line,sizeof(line),"No images");
+    dc.setFont(smallFont);
+    dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+    dc.write(mxgui::Point(40,35),line);
 }
 
 template<class IOHandler>
