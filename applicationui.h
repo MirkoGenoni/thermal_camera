@@ -225,6 +225,7 @@ private:
         Emissivity,
         FrameRate,
         Brightness,
+        RestoreDefault,
         SaveChanges,
         NumOptEntries
     };
@@ -632,6 +633,10 @@ void ApplicationUI<IOHandler>::drawOptionsEntry(mxgui::DrawingContext& dc, int i
             sniprintf(buffer, 8, "%d", options.brightness);
             _drawMenuOptionEntry(dc, Brightness, "Brightness", buffer);
             break;
+        case RestoreDefault:
+            sniprintf(buffer, 8, "%d", 0);
+            _drawMenuOptionEntry(dc, RestoreDefault, "Restore");
+            break;
         case SaveChanges:
             _drawMenuOptionEntry(dc, SaveChanges, "Save changes");
             break;
@@ -697,6 +702,15 @@ void ApplicationUI<IOHandler>::updateOptions(mxgui::DrawingContext& dc)
                 else options.brightness+=1;
                 display.setBrightness(options.brightness * 6);
                 drawOptionsEntry(dc, Brightness);
+                break;
+            case RestoreDefault:
+                options.frameRate=8;
+                options.emissivity=0.8;
+                options.brightness=5;
+                drawOptionsEntry(dc, Emissivity);
+                drawOptionsEntry(dc, FrameRate);
+                drawOptionsEntry(dc, Brightness);
+                ioHandler.saveOptions(options);
                 break;
             case SaveChanges:
                 ioHandler.saveOptions(options);
