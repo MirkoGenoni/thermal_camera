@@ -86,7 +86,8 @@ enum TopType
     Data,
     SaveConfirm,
     GalleryId,
-    Camera
+    Camera,
+    Delete
 };
 
 /**
@@ -129,6 +130,8 @@ public:
     unsigned short skip=0;
     bool next = false;
     bool forward = false;
+    bool deleting = false;
+    unsigned short galleryId = 0;
 
 private:
     ApplicationUI(const ApplicationUI&)=delete;
@@ -355,47 +358,62 @@ void ApplicationUI<IOHandler>::drawStaticTopBar(mxgui::DrawingContext& dc, TopTy
     const mxgui::Point p1(127,12);
     dc.clear(p0, p1, mxgui::black);
     char line[16];
-    if(save == TopType::SaveConfirm)
-    {
-        char yes[4];
-        char no [3];
-        sniprintf(line, sizeof(line), "save?");
-        sniprintf(yes, sizeof(yes), "yes ");
-        sniprintf(no, sizeof(no), "no ");
+    char yes[4];
+    char no [3];
+    switch(save){
+        case TopType::SaveConfirm:
+            sniprintf(line, sizeof(line), "save?");
+            sniprintf(yes, sizeof(yes), "yes ");
+            sniprintf(no, sizeof(no), "no ");
 
-        dc.setFont(smallFont);
-        dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
-        dc.write(mxgui::Point(1,0), yes);
-        dc.write(mxgui::Point(52,0),line);
-        dc.write(mxgui::Point(116,0), no);
-    } else if(save == TopType::Data){
-        snprintf(line,sizeof(line),"%.2f  %2dfps ",options.emissivity,options.frameRate);
-        dc.drawImage(mxgui::Point(0,0),emissivityicon);
-        dc.setFont(smallFont);
-        dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
-        dc.write(mxgui::Point(11,0),line);
-    } else if(save== TopType::GalleryId){
-        char write[4];
-        char id[6];
-        sniprintf(write, sizeof(write), "id: ");
-        sniprintf(id, sizeof(id), std::to_string(idNum).c_str());
+            dc.setFont(smallFont);
+            dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+            dc.write(mxgui::Point(1,0), yes);
+            dc.write(mxgui::Point(52,0),line);
+            dc.write(mxgui::Point(116,0), no);
+            break;
+        case TopType::Data:
+            snprintf(line,sizeof(line),"%.2f  %2dfps ",options.emissivity,options.frameRate);
+            dc.drawImage(mxgui::Point(0,0),emissivityicon);
+            dc.setFont(smallFont);
+            dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+            dc.write(mxgui::Point(11,0),line);
+            break;
+        case TopType::GalleryId:
+            char write[4];
+            char id[6];
+            sniprintf(write, sizeof(write), "id: ");
+            sniprintf(id, sizeof(id), std::to_string(idNum).c_str());
 
-        dc.setFont(smallFont);
-        dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
-        dc.write(mxgui::Point(80,0), write);
-        dc.write(mxgui::Point(100,0), id);
-    } else if(save==TopType::Camera){        
-        snprintf(line,sizeof(line),"%.2f  %2dfps ",options.emissivity,options.frameRate);
-        dc.drawImage(mxgui::Point(0,0),emissivityicon);
-        dc.setFont(smallFont);
-        dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
-        dc.write(mxgui::Point(11,0),line);
-        char remaining[16];
-        unsigned int currentId = ioHandler.memoryState->getCurrentImageId();
-        sniprintf(remaining, 16, "%u", currentId);
-        dc.setFont(smallFont);
-        dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
-        dc.write(mxgui::Point(100,0), remaining);
+            dc.setFont(smallFont);
+            dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+            dc.write(mxgui::Point(80,0), write);
+            dc.write(mxgui::Point(100,0), id);
+            break;        
+        case TopType::Delete:
+            sniprintf(line, sizeof(line), "delete?");
+            sniprintf(yes, sizeof(yes), "yes ");
+            sniprintf(no, sizeof(no), "no ");
+
+            dc.setFont(smallFont);
+            dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+            dc.write(mxgui::Point(1,0), yes);
+            dc.write(mxgui::Point(52,0),line);
+            dc.write(mxgui::Point(116,0), no);
+            break;
+        case TopType::Camera:
+            snprintf(line,sizeof(line),"%.2f  %2dfps ",options.emissivity,options.frameRate);
+            dc.drawImage(mxgui::Point(0,0),emissivityicon);
+            dc.setFont(smallFont);
+            dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+            dc.write(mxgui::Point(11,0),line);
+            char remaining[16];
+            unsigned int currentId = ioHandler.memoryState->getCurrentImageId();
+            sniprintf(remaining, 16, "%u", currentId);
+            dc.setFont(smallFont);
+            dc.setTextColor(std::make_pair(mxgui::white,mxgui::black));
+            dc.write(mxgui::Point(100,0), remaining);
+            break;
     }
 }
 
@@ -499,6 +517,7 @@ void ApplicationUI<IOHandler>::drawLoaded(MLX90640Frame *processedFrame, unsigne
         lastFrame = std::shared_ptr<MLX90640Frame>(processedFrame);
     }
     mxgui::DrawingContext dc(display);
+    galleryId = id;
     drawStaticTopBar(dc, TopType::GalleryId, id);
 
     drawFrame(dc);
@@ -538,18 +557,36 @@ void ApplicationUI<IOHandler>::updateGallery(mxgui::DrawingContext& dc)
         ioHandler.setPause(paused);
         puts("BACK TO MENU");
     } else if(upBtn.getUpEvent()){
-        if(skip != 3 && skip != 0) skip--;
-        else if(skip==3) next=true;
-        ioHandler.prevImage(found);
-        puts("PREV IMAGE");
+        if(!deleting){
+            if(skip != 3 && skip != 0) skip--;
+            else if(skip==3) next=true;
+            ioHandler.prevImage(found);
+            puts("PREV IMAGE");
+        } else {
+            puts("Deleting");
+            ioHandler.deleteImage(found, galleryId);
+            deleting=false;
+            drawStaticTopBar(dc, TopType::GalleryId, galleryId);
+        }
     }
-    if(onBtn.getAutorepeatEvent()){
-        if(skip < 3)
-            skip++;
-        else if(skip==3)
-            next = true;
-        ioHandler.nextImage(found);
-        puts("NEXT IMAGE");
+    if(onBtn.getLongPressEvent()){
+        drawStaticTopBar(dc, TopType::Delete);
+        deleting=true;
+        puts("ENTER DELETING");
+        onBtn.ignoreUntilNextPress();
+    } else if(onBtn.getUpEvent()){
+        if(!deleting){
+            if(skip < 3)
+                skip++;
+            else if(skip==3)
+                next = true;
+            ioHandler.nextImage(found);
+            puts("NEXT IMAGE");
+        } else {
+            puts("Not deleting");
+            deleting=false;
+            drawStaticTopBar(dc, TopType::GalleryId, galleryId);
+        }
     }
 }
 
