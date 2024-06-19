@@ -668,3 +668,77 @@ bool ImageVisualizer::deleteImage(std::list<std::unique_ptr<ImagesFound>> &found
     nextImage(foundL);
     return true;
 }
+
+unsigned short ImageVisualizer::findMaxId(){
+    unsigned int imapAddress = memoryState->getFreeAddress() & 0xffff8000;
+    unique_ptr<ImapNavigation> imapNavigator = make_unique<ImapNavigation>(imapAddress);
+
+    list<ImapModifiedCache *>::iterator it;
+    list<ImapModifiedCache *> imap_modified = memoryState->getImapsModified();
+
+    Flash& flash = Flash::instance();
+    auto buffer = make_unique<unsigned char[]>(256);
+    auto imap = reinterpret_cast<ImapStruct *>(buffer.get() + sizeof(ShortHeader));
+    auto inode = reinterpret_cast<InodeStruct *>(buffer.get() + sizeof(ShortHeader));
+
+    if (imap_modified.size() > 0)
+        iprintf("IMAP modified not written in any imap\n");
+
+    unsigned short maxId=0;
+
+    // ## IMAP MODIFIED NOT WRITTEN ##
+    int counter = 0;
+    for (it = imap_modified.begin(); it != imap_modified.end(); ++it)
+    {
+        if (imapNavigator->setLooked((*it)->id))
+        {
+
+            if (flash.read((*it)->address, buffer.get(), 256) == false)
+            {
+                iprintf("Error Reading 0x%x\n", ((*it)->address << 8));
+            }            
+            for(int i=0; i<22; i++){
+                if(imap->image_ids[i]>maxId) maxId=imap->image_ids[i];
+            }
+        };
+    }
+
+    // ## IMAGE FROM CURRENT SECTOR NOT WRITTEN ##
+    for (auto data : memoryState->getSector().get()->pages)
+    {
+        if (data.type == 1 && data.used == true)
+        {
+            if(data.id > maxId) maxId = data.id;
+        }
+    }
+
+    // ## IMAGES FROM PREVIOUS INODE ##
+    counter = 0;
+    if (memoryState->getInodeFound() == true)
+    {
+        for (auto ids : memoryState->getImagesOld())
+        {
+            if(ids > maxId) maxId = ids;
+        }
+    }
+
+    // ## NAVIGATION THROUGH ALL IMAPS ##
+    // Address of the last imap
+    imapAddress = imapNavigator->nextAddress();
+
+    // Search for inodes of first five elements
+    while (imapAddress > 0)
+    {
+        if (flash.read(imapAddress, buffer.get(), 256) == false)
+        {
+            iprintf("Error Reading 0x%x", imapAddress);
+        }
+
+        for (auto id : imap->image_ids)
+        {
+            if(id > maxId) maxId = id;
+        }
+        imapAddress = imapNavigator->nextAddress();
+    }
+    return maxId+1;
+}

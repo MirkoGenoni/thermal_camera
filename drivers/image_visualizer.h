@@ -19,6 +19,8 @@ public:
 
     bool deleteImage(std::list<std::unique_ptr<ImagesFound>> &foundL, unsigned short id);
 
+    unsigned short findMaxId();
+
 private:
     MemoryState *memoryState;
     void searchFrameAddresses(std::list<std::unique_ptr<ImagesFound>> &foundL);

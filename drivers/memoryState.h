@@ -89,6 +89,11 @@ public:
     {
         return currentImageId;
     }
+
+    void setCurrentImageId(unsigned short id){
+        currentImageId = id;
+    }
+    
     void increaseImageId()
     {
         currentImageId++;

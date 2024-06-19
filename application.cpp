@@ -64,6 +64,9 @@ Application::Application(Display& display)
 {
     memoryState = new MemoryState();
     memoryState->scanMemory(sizeof(ui.options));
+
+    unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
+    memoryState->setCurrentImageId(visualizer->findMaxId());
     unsigned int settingsAddress = memoryState->getSettingAddress();
     if(!loadOptions(&ui.options,sizeof(ui.options), settingsAddress)){
         saveOptions(ui.options);
