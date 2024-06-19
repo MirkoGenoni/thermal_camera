@@ -366,10 +366,6 @@ void MemoryState::scanMemory(int optionsSize){
         }
     }
 
-    //TODO: add handling of no images in current imap, search for last id in previous imaps 
-    if (currentImageId == (unsigned short)-1)
-        currentImageId = 1;
-
     unique_ptr<DebugLogger> debug = make_unique<DebugLogger>();
     debug.get()->printMemoryState();
     debug.get()->printSectorPages(sector->pages);
