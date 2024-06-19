@@ -248,6 +248,12 @@ void Application::prevImage(std::list<std::unique_ptr<ImagesFound>>& found){
     ui.drawLoaded(frame, it->get()->id);
 }
 
+void Application::deleteImage(std::list<std::unique_ptr<ImagesFound>>& found, unsigned short id){
+    unique_ptr<ImageVisualizer> visualizer = make_unique<ImageVisualizer>(memoryState);
+    visualizer->deleteImage(found, id);
+    iprintf("DELETING: %hu\n", id);
+}
+
 void Application::saveOptions(ApplicationOptions& options)
 {
     ::saveOptions(memoryState, &options,sizeof(options));

@@ -67,6 +67,8 @@ public:
 
     void prevImage(std::list<std::unique_ptr<ImagesFound>>& found);
 
+    void deleteImage(std::list<std::unique_ptr<ImagesFound>>& found, unsigned short id);
+
     void clearMemory();
     
     MemoryState *memoryState;
