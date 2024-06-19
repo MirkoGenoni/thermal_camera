@@ -566,6 +566,7 @@ void ApplicationUI<IOHandler>::updateGallery(mxgui::DrawingContext& dc)
             puts("Deleting");
             ioHandler.deleteImage(found, galleryId);
             deleting=false;
+            ioHandler.prevImage(found);
             drawStaticTopBar(dc, TopType::GalleryId, galleryId);
         }
     }
