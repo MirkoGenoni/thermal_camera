@@ -299,6 +299,7 @@ void MemoryState::scanMemory(int optionsSize){
                     }
                     sector->pages[counter2].id = headerImage->id;
                     sector->pages[counter2].position = headerImage->position;
+                    sector->pages[counter2].used=true;
                     counter2++;
                 }
                 addPages(unmarkedAddress, (unsigned char)2, inode->id, 0);
