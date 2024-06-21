@@ -3,8 +3,7 @@
 struct InodeStruct
 {
     unsigned short id;
-    unsigned short image_ids[11];
-    unsigned short freeable;
+    unsigned short image_ids[12];
     unsigned char content[189];
 };
 

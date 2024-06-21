@@ -6,7 +6,7 @@ struct ImapStruct
     unsigned short inode_addresses[2];
     unsigned short modified_imaps[68];
     
-    unsigned short image_ids[22];
+    unsigned short image_ids[24];
 };
 
 class Imap {
