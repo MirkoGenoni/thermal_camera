@@ -17,9 +17,17 @@
 #include "imap.h"
 #include "struct.h"
 #include "debugLogger.h"
+#include "options_save.h"
 
 using namespace std;
 using namespace miosix;
+
+struct Options
+{
+    int frameRate=8; //NOTE: to get beyond 8fps the I2C bus needs to be overclocked too!
+    float emissivity=0.95f;
+    int brightness=15;
+};
 
 bool MemoryState::increaseOccupiedMemory(unsigned int dimension)
 {
@@ -31,6 +39,7 @@ bool MemoryState::increaseOccupiedMemory(unsigned int dimension)
 
 void MemoryState::increaseMemoryAddressFree(unsigned int address, unsigned char type, unsigned short id, unsigned char position, unsigned int increment){
     unique_ptr<DebugLogger> debug = make_unique<DebugLogger>();
+    auto& flash = Flash::instance();
     firstMemoryAddressFree+=increment;
     
     sector->pages[occupiedMemory].address=address>>8;
@@ -133,6 +142,11 @@ void MemoryState::increaseMemoryAddressFree(unsigned int address, unsigned char 
             imageIds_0.clear();
             imageIds_1.clear();
             inodeFound = false;
+
+            auto buffer=make_unique<unsigned char[]>(256);
+            auto *options=reinterpret_cast<Options*>(buffer.get()+sizeof(Header));
+            flash.read(settingsAddress, buffer.get(), 256);
+            saveOptions(this, options, sizeof(Options));
         }
         else
         {
@@ -295,6 +309,12 @@ void MemoryState::scanMemory(int optionsSize){
                         ImapModified->address = containedAddress << 8;
                         imap_modified.push_front(std::move(ImapModified));
                     }
+
+                    if ((unsigned short)type == 0 && !optionsFound)
+                    {
+                        setSettingAddress(containedAddress);
+                        optionsFound = true;
+                    }
                     sector->pages[counter2].id = headerImage->id;
                     sector->pages[counter2].position = headerImage->position;
                     sector->pages[counter2].used=true;
@@ -355,6 +375,11 @@ void MemoryState::scanMemory(int optionsSize){
                 ImapModified->id = imapModifiedPointer->id;
                 ImapModified->address = imapModifiedAddress;
                 imap_modified.push_back(std::move(ImapModified));
+            }
+            if ((unsigned short)inode->content[i] == 0 && !optionsFound)
+            {
+                setSettingAddress(imapModifiedAddress);
+                optionsFound = true;
             }
         }
 
